@@ -1,0 +1,11 @@
+{
+  "name": "airwatch",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix client install && npm --prefix server run db:deploy && npm --prefix server run db:seed",
+    "dev:model": "cd adaptive-aqi-model && .venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8001",
+    "dev:api": "npm --prefix server run dev",
+    "dev:web": "npm --prefix client run dev",
+    "test": "npm --prefix server test"
+  }
+}

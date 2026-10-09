@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  MUNICIPAL
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  INSPECTION_ASSIGNED
+  RESOLVED
+  REJECTED
+}
+
+// EVALUATED is the only status that carries a model verdict. Every other status
+// means "no assessment was produced" and must never be shown as normal/anomalous.
+enum EvaluationStatus {
+  EVALUATED
+  INPUT_REJECTED
+  MODEL_UNAVAILABLE
+  MODEL_ERROR
+}
+
+enum AttachmentKind {
+  CITIZEN_PHOTO
+  INSPECTION_EVIDENCE
+}
+
+enum ComplaintEventType {
+  SUBMITTED
+  STATUS_CHANGED
+  OFFICER_ASSIGNED
+  NOTE_ADDED
+  EVIDENCE_UPLOADED
+  FINDINGS_UPDATED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(CITIZEN)
+  createdAt    DateTime @default(now())
+
+  complaints         Complaint[]      @relation("ComplaintCitizen")
+  assignedComplaints Complaint[]      @relation("ComplaintOfficer")
+  events             ComplaintEvent[]
+  attachments        Attachment[]
+}
+
+model Locality {
+  id        String @id @default(cuid())
+  code      String @unique
+  name      String
+  latitude  Float
+  longitude Float
+
+  stations   Station[]
+  sites      Site[]
+  complaints Complaint[]
+}
+
+// Background (reference) monitoring station.
+model Station {
+  id         String @id @default(cuid())
+  code       String @unique
+  name       String
+  latitude   Float
+  longitude  Float
+  localityId String
+
+  locality Locality @relation(fields: [localityId], references: [id])
+  sites    Site[]
+}
+
+model Site {
+  id                   String @id @default(cuid())
+  code                 String @unique
+  name                 String
+  address              String
+  latitude             Float
+  longitude            Float
+  localityId           String
+  stationId            String
+  // Geometry of the station -> site pair, used to derive model feature inputs.
+  distanceToBackgroundM Float
+  siteBearingDeg        Float
+
+  locality     Locality            @relation(fields: [localityId], references: [id])
+  station      Station             @relation(fields: [stationId], references: [id])
+  observations SensorObservation[]
+  evaluations  AnomalyEvaluation[]
+  complaints   Complaint[]
+  simulator    SimulatorState?
+}
+
+// Paired readings exactly as received from the sensor provider, plus the
+// platform-canonical (ug/m3) values when the reported unit is convertible.
+model SensorObservation {
+  id                  String   @id @default(cuid())
+  siteId              String
+  dataSource          String
+  pollutant           String
+  averaging           String
+  backgroundSensorId  String
+  backgroundValue     Float
+  backgroundUnit      String
+  backgroundTimestamp DateTime
+  siteSensorId        String
+  siteValue           Float
+  siteUnit            String
+  siteTimestamp       DateTime
+  backgroundUgm3      Float?
+  siteUgm3            Float?
+  temperatureC        Float?
+  humidityPct         Float?
+  windSpeedMs         Float?
+  windDirectionDeg    Float?
+  windConvention      String?
+  receivedAt          DateTime @default(now())
+
+  site       Site               @relation(fields: [siteId], references: [id])
+  evaluation AnomalyEvaluation?
+
+  @@index([siteId, receivedAt])
+  @@index([receivedAt])
+}
+
+// One row per inference attempt. Verdict fields are only populated from a real
+// FastAPI /predict response (status = EVALUATED).
+model AnomalyEvaluation {
+  id            String           @id @default(cuid())
+  observationId String           @unique
+  siteId        String
+  status        EvaluationStatus
+  reason        String?
+  evaluatedAt   DateTime         @default(now())
+
+  // Sensor values as sent to the model.
+  backgroundValue     Float?
+  siteValue           Float?
+  unit                String?
+  measurementType     String?
+  scaleId             String?
+  backgroundTimestamp DateTime?
+  siteTimestamp       DateTime?
+  features            Json?
+
+  // Model response.
+  observedDifference       Float?
+  expectedNormalDifference Float?
+  calibratedMargin         Float?
+  dynamicBarrier           Float?
+  isAnomaly                Boolean?
+  interpretation           String?
+
+  // Model identity at inference time.
+  modelVersion       String?
+  modelAlgorithm     String?
+  modelDataSource    String?
+  modelSyntheticOnly Boolean?
+
+  observation SensorObservation @relation(fields: [observationId], references: [id])
+  site        Site              @relation(fields: [siteId], references: [id])
+  complaints  Complaint[]
+
+  @@index([siteId, evaluatedAt])
+  @@index([evaluatedAt])
+  @@index([isAnomaly, evaluatedAt])
+}
+
+// Complaints are citizen reports. They may reference an anomaly evaluation as
+// evidence but exist independently of it.
+model Complaint {
+  id           String          @id @default(cuid())
+  seq          Int             @unique @default(autoincrement())
+  citizenId    String
+  localityId   String
+  siteId       String?
+  description  String
+  latitude     Float?
+  longitude    Float?
+  locationText String?
+  status       ComplaintStatus @default(SUBMITTED)
+
+  // Evidence captured automatically at submission time.
+  anomalyEvaluationId String?
+  sensorSnapshot      Json?
+
+  assignedOfficerId String?
+  findings          String?
+  correctiveAction  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  citizen           User               @relation("ComplaintCitizen", fields: [citizenId], references: [id])
+  assignedOfficer   User?              @relation("ComplaintOfficer", fields: [assignedOfficerId], references: [id])
+  locality          Locality           @relation(fields: [localityId], references: [id])
+  site              Site?              @relation(fields: [siteId], references: [id])
+  anomalyEvaluation AnomalyEvaluation? @relation(fields: [anomalyEvaluationId], references: [id])
+  attachments       Attachment[]
+  events            ComplaintEvent[]
+
+  @@index([citizenId, createdAt])
+  @@index([status, createdAt])
+  @@index([localityId])
+  @@index([siteId])
+}
+
+model Attachment {
+  id           String         @id @default(cuid())
+  complaintId  String
+  uploadedById String
+  kind         AttachmentKind
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  caption      String?
+  data         Bytes
+  createdAt    DateTime       @default(now())
+
+  complaint  Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  uploadedBy User      @relation(fields: [uploadedById], references: [id])
+
+  @@index([complaintId])
+}
+
+// Append-only audit trail.
+model ComplaintEvent {
+  id          String             @id @default(cuid())
+  complaintId String
+  actorId     String
+  type        ComplaintEventType
+  fromStatus  ComplaintStatus?
+  toStatus    ComplaintStatus?
+  note        String?
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  actor     User      @relation(fields: [actorId], references: [id])
+
+  @@index([complaintId, createdAt])
+}
+
+// Mock sensor scenario per site. Only read by the mock sensor provider.
+model SimulatorState {
+  siteId    String   @id
+  scenario  String   @default("NORMAL")
+  updatedAt DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,181 @@
+@import 'tailwindcss';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans-devanagari/400.css';
+@import '@fontsource/ibm-plex-sans-devanagari/500.css';
+@import '@fontsource/ibm-plex-sans-devanagari/600.css';
+@import 'leaflet/dist/leaflet.css';
+
+@theme {
+  --font-sans: 'IBM Plex Sans', 'IBM Plex Sans Devanagari', ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces: warm paper, white work surface, a second neutral for navigation. */
+  --color-paper: #f5f4ef;
+  --color-surface: #ffffff;
+  --color-panel: #ebe9e1;
+  --color-line: #dcd9cf;
+  --color-line-strong: #c4c0b3;
+
+  --color-ink: #16201e;
+  --color-ink-2: #44504d;
+  --color-ink-3: #5f6a67;
+
+  --color-accent: #0b5d57;
+  --color-accent-strong: #084742;
+  --color-accent-soft: #e0eeeb;
+
+  /* Status. Always paired with an icon and a label. */
+  --color-flag: #b3261e;
+  --color-flag-soft: #fcebe9;
+  --color-flag-line: #f0c2bd;
+  --color-ok: #1b6a3d;
+  --color-ok-soft: #e5f2e9;
+  --color-warn: #7a5200;
+  --color-warn-soft: #faf0d7;
+  --color-warn-line: #ead9a8;
+  --color-mute-soft: #eceae3;
+
+  /* Chart series (validated categorical order). */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  --color-series-4: #eda100;
+
+  --radius-card: 10px;
+  --shadow-card: 0 1px 2px rgb(22 32 30 / 0.05), 0 4px 14px -6px rgb(22 32 30 / 0.1);
+  --shadow-pop: 0 2px 4px rgb(22 32 30 / 0.06), 0 14px 32px -10px rgb(22 32 30 / 0.22);
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  body {
+    min-height: 100dvh;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    caret-color: var(--color-accent);
+  }
+  ::selection {
+    background: #bfe0db;
+    color: var(--color-ink);
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  button, [role='button'], select, summary, label[for] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  /* Hindi sets slightly taller; give lines room. */
+  :lang(hi) body {
+    line-height: 1.6;
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'zero' 0;
+}
+
+/* "No assessment" texture: a state the reader must not confuse with normal. */
+@utility hatch {
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgb(22 32 30 / 0.07) 5px 6px);
+}
+
+.field {
+  @apply block w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-[0.9375rem] text-ink placeholder:text-ink-3 transition-colors duration-150;
+}
+.field:hover {
+  border-color: var(--color-ink-3);
+}
+.field:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+  border-color: var(--color-accent);
+}
+.field[aria-invalid='true'] {
+  border-color: var(--color-flag);
+}
+
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--color-mute-soft) 0%, #f6f5f0 50%, var(--color-mute-soft) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+@keyframes flag-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(179 38 30 / 0.45); }
+  100% { box-shadow: 0 0 0 12px rgb(179 38 30 / 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .map-pin-flag { animation: none !important; }
+}
+
+/* Leaflet, themed to the palette. */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #e9e7df;
+  border-radius: inherit;
+  z-index: 0;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  color: var(--color-ink);
+}
+.leaflet-popup-content {
+  margin: 12px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+}
+.map-pin {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50% 50% 50% 4px;
+  transform: rotate(-45deg);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgb(22 32 30 / 0.35);
+  color: #fff;
+}
+.map-pin > svg {
+  transform: rotate(45deg);
+}
+.map-pin-flag { background: var(--color-flag); animation: flag-pulse 1.8s ease-out infinite; }
+.map-pin-ok { background: var(--color-ok); }
+.map-pin-none { background: #6b7572; }
+.map-pin-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; }
+.map-station {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: #fff;
+  border: 2px solid var(--color-series-1);
+  box-shadow: 0 1px 4px rgb(22 32 30 / 0.3);
+  display: grid;
+  place-items: center;
+  color: var(--color-series-1);
+}

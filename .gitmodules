@@ -1,0 +1,3 @@
+[submodule "adaptive-aqi-model"]
+	path = adaptive-aqi-model
+	url = https://github.com/NSTKrishna/adaptive-aqi-model.git
