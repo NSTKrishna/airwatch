@@ -75,13 +75,22 @@ async function main() {
     prisma.locality.updateMany({ where: { code: { notIn: localityCodes }, active: true }, data: { active: false } }),
   ]);
 
-  // Demo accounts are for development and the hackathon demo only.
+  // Demo accounts are for development and the hackathon demo only. In production the
+  // well-known development passwords are refused: supply your own or skip the accounts.
   if (process.env.SEED_DEMO_USERS !== 'false') {
+    const production = process.env.NODE_ENV === 'production';
+    const override = { CITIZEN: process.env.DEMO_CITIZEN_PASSWORD, MUNICIPAL: process.env.DEMO_OFFICER_PASSWORD };
+    for (const u of USERS) {
+      const password = override[u.role] || (production ? null : u.password);
+      if (!password || password.length < 8) throw new Error(`Set DEMO_${u.role === 'CITIZEN' ? 'CITIZEN' : 'OFFICER'}_PASSWORD (8+ characters) or SEED_DEMO_USERS=false`);
+      u.password = password;
+    }
     for (const u of USERS) {
       await prisma.user.upsert({
         where: { email: u.email },
         create: { email: u.email, name: u.name, role: u.role, passwordHash: await bcrypt.hash(u.password, 12) },
-        update: { name: u.name, role: u.role },
+        // An explicitly supplied password is applied on re-seed; otherwise existing passwords are left alone.
+        update: { name: u.name, role: u.role, ...(override[u.role] ? { passwordHash: await bcrypt.hash(u.password, 12) } : {}) },
       });
     }
   }

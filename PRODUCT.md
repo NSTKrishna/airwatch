@@ -12,12 +12,12 @@ React + Vite, Tailwind CSS, React Router, Recharts, React Leaflet; Node.js + Exp
 
 ## Users
 
-- **Citizens** in Delhi localities (Rohini, Dwarka, Okhla, Anand Vihar), mostly on phones, often outdoors next to the site they are worried about. They want to know whether dust near them is unusual and to report a site with a photo.
+- **Citizens** in Mumbai localities (Andheri, Bandra, Kurla, Powai), mostly on phones, often outdoors next to the site they are worried about. They want to know whether dust near them is unusual and to report a site with a photo.
 - **Municipal officers**, desk first with the phone as a usable fallback for inspection notes and evidence in the field. They triage reports, assign inspections, and record findings and corrective action.
 
 ## Product Purpose
 
-AirWatch compares a construction site's PM10 reading with a nearby background reading. An existing Random Forest model estimates the normal difference and adds a calibrated margin; a reading above that dynamic barrier is flagged as an anomaly for review. Citizens can report a site (with or without a flag); officers work each report through to an outcome.
+AirWatch receives PM2.5 and PM10 from site monitors and compares a site's PM10 with a nearby background reading. An existing Random Forest model estimates the normal difference and adds a calibrated margin; a difference above that dynamic barrier is flagged as an unexpected PM10 excess for review. Citizens can report a site (with or without a flag); officers work each report through to an outcome.
 
 ## Positioning
 
@@ -29,16 +29,19 @@ Complaint lifecycle: Submitted → Under Review → Inspection Assigned → Reso
 
 ## Capabilities and Constraints
 
-- An anomaly is evidence for review, never a finding that a site broke the law.
+- A flag is evidence for review. It is never a finding of a violation, of sensor tampering or failure, or of what caused the dust.
+- The model is the synthetic Delhi demo model, not validated for Mumbai. It assesses PM10 only; PM2.5 is stored and shown.
+- Site monitors, background PM10 and wind are separate sources. Missing context is reported, never filled in, and simulated context is never paired with a real device's reading.
+- This is a demonstration, not an official BMC system.
 - No model verdict is shown unless the FastAPI model actually returned one. "No assessment" is a first-class state.
-- Sensor data is currently simulated and must be labelled as such wherever it appears.
+- All eight sites, their devices and all readings are currently simulated; every reading is labelled with its source (simulated or authenticated device).
 - The trained model and its calibration are not modified by this product.
-- Citizen screens ship in English and Hindi. Hindi copy is a first draft and has not been reviewed by a native speaker (open item).
+- Citizen screens ship in English and Hindi. Hindi copy is a first draft and has not been reviewed by a native speaker (open item). Marathi is not yet offered (open item).
 - Municipal screens are English only for now.
 
 ## Evidence on Hand
 
-No real sensor feed, no real construction-site registry, no real complaints. Site names and positions are illustrative. Do not present any of it as measured or official.
+No real sensor feed, no vendor integration, no real construction-site registry, no real complaints. Site names and positions are fictional demo locations in real Mumbai areas. Do not present any of it as measured or official.
 
 ## Product Principles
 

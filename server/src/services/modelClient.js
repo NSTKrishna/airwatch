@@ -55,6 +55,12 @@ export async function getModelInfo({ fresh = false } = {}) {
         calibratedMargin: body.calibrated_margin ?? null,
       };
       info.version = describeModelVersion(info);
+      // The test suite's stand-in must never serve verdicts in a deployed system.
+      if (config.env === 'production' && (info.algorithm === 'TEST_DOUBLE' || info.dataSource === 'TEST_DOUBLE')) {
+        info.ready = false;
+        info.reason = 'Refusing a test double as the model service in production';
+        info.version = null;
+      }
     }
   } catch {
     info = { reachable: false, ready: false, reason: 'Model service is unreachable', version: null };

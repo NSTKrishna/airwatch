@@ -1,0 +1,18 @@
+# Optional overlay: ship container logs to CloudWatch Logs.
+# Needs an EC2 instance role allowing logs:CreateLogGroup, logs:CreateLogStream and logs:PutLogEvents.
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.cloudwatch.yml --env-file deploy/.env.production up -d
+x-cloudwatch: &cloudwatch
+  driver: awslogs
+  options:
+    awslogs-region: ${AWS_REGION}
+    awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/airwatch/prod}
+    awslogs-create-group: "true"
+    tag: "{{.Name}}"
+
+services:
+  db: { logging: *cloudwatch }
+  model: { logging: *cloudwatch }
+  migrate: { logging: *cloudwatch }
+  api: { logging: *cloudwatch }
+  worker: { logging: *cloudwatch }
+  caddy: { logging: *cloudwatch }

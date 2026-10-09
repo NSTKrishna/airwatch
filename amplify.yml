@@ -1,0 +1,20 @@
+# AWS Amplify Hosting build for the React client (monorepo: app root is client/).
+# Set VITE_API_BASE_URL in the Amplify console to the HTTPS origin of the API, e.g. https://api.example.com
+version: 1
+applications:
+  - appRoot: client
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
