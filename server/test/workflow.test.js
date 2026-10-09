@@ -1,66 +1,24 @@
 // End-to-end citizen -> municipal workflow over HTTP against a real PostgreSQL
-// test database, using simulated construction-dust readings.
+// test database, using simulated construction-dust readings that travel through
+// the device ingestion API.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import 'dotenv/config';
-import { startModelDouble } from './helpers/modelDouble.js';
+import { PNG, complaintForm, startStack } from './helpers/stack.js';
 
-const serverDir = fileURLToPath(new URL('..', import.meta.url));
-const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL.replace(/\/airwatch(\?|$)/, '/airwatch_test$1');
-assert.notEqual(testDbUrl, process.env.DATABASE_URL, 'refusing to run the workflow test against the development database');
-
-// 1x1 PNG.
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-
-let model; let server; let base; let prisma;
+let stack; let api; let model; let prisma;
 const tokens = {};
 
-async function api(method, path, { token, json, form } = {}) {
-  const headers = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-  if (json) headers['content-type'] = 'application/json';
-  const response = await fetch(`${base}${path}`, { method, headers, body: json ? JSON.stringify(json) : form });
-  const type = response.headers.get('content-type') || '';
-  return { status: response.status, body: type.includes('json') ? await response.json() : await response.arrayBuffer(), headers: response.headers };
-}
-
-function complaintForm(fields, files = [{ name: 'dust.png', data: PNG, type: 'image/png' }]) {
-  const form = new FormData();
-  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
-  for (const f of files) form.append('photos', new Blob([f.data], { type: f.type }), f.name);
-  return form;
-}
-
 before(async () => {
-  model = await startModelDouble();
-  Object.assign(process.env, { NODE_ENV: 'test', SENSOR_PROVIDER: 'mock', DATABASE_URL: testDbUrl, MODEL_API_URL: model.url, MONITOR_INTERVAL_SECONDS: '0' });
-  const env = { ...process.env };
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], { cwd: serverDir, env, stdio: 'pipe' });
-  ({ prisma } = await import('../src/db.js'));
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE "ComplaintEvent","Attachment","Complaint","AnomalyEvaluation","SensorObservation","SimulatorState","Site","Station","Locality","User" RESTART IDENTITY CASCADE');
-  execFileSync('node', ['prisma/seed.js'], { cwd: serverDir, env, stdio: 'pipe' });
-
-  const { createApp } = await import('../src/app.js');
-  server = createApp().listen(0);
-  base = `http://127.0.0.1:${server.address().port}/api`;
-
-  const login = async (email, password) => (await api('POST', '/auth/login', { json: { email, password } })).body.token;
-  tokens.citizen = await login('citizen@airwatch.test', 'Citizen@123');
-  tokens.officer = await login('officer@airwatch.test', 'Officer@123');
+  stack = await startStack();
+  ({ api, model, prisma } = stack);
+  Object.assign(tokens, stack.tokens);
   const other = await api('POST', '/auth/register', { json: { name: 'Other Citizen', email: 'other@example.com', password: 'password123' } });
   assert.equal(other.status, 201);
   assert.equal(other.body.user.role, 'CITIZEN');
   tokens.other = other.body.token;
 });
 
-after(async () => {
-  server?.close();
-  await prisma?.$disconnect();
-  await model?.close();
-});
+after(() => stack?.close());
 
 const ctx = {};
 
@@ -71,7 +29,7 @@ test('authentication and role boundaries', async () => {
   // Sign-up cannot be used to obtain a municipal role.
   const sneaky = await api('POST', '/auth/register', { json: { name: 'Sneaky', email: 'sneaky@example.com', password: 'password123', role: 'MUNICIPAL' } });
   assert.equal(sneaky.body.user.role, 'CITIZEN');
-  for (const path of ['/municipal/summary', '/municipal/complaints', '/municipal/officers', '/municipal/analytics', '/municipal/simulator', '/mock-sensors/sites/DEL-ROH-A/latest']) {
+  for (const path of ['/municipal/summary', '/municipal/complaints', '/municipal/officers', '/municipal/analytics', '/municipal/simulator', '/municipal/devices']) {
     assert.equal((await api('GET', path, { token: tokens.citizen })).status, 403, path);
   }
   assert.equal((await api('POST', '/municipal/monitoring/run', { token: tokens.citizen })).status, 403);
@@ -81,12 +39,11 @@ test('authentication and role boundaries', async () => {
 
 test('no verdict is produced while the model is unavailable', async () => {
   model.state.ready = false;
-  const { resetModelInfoCache } = await import('../src/services/modelClient.js');
-  resetModelInfoCache();
+  await stack.resetModelCache();
   const sweep = await api('POST', '/municipal/monitoring/run', { token: tokens.officer });
-  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: 4 });
+  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: 8 });
   const rows = await prisma.anomalyEvaluation.findMany();
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 8);
   for (const row of rows) {
     assert.equal(row.isAnomaly, null);
     assert.equal(row.dynamicBarrier, null);
@@ -94,23 +51,23 @@ test('no verdict is produced while the model is unavailable', async () => {
   }
   const summary = await api('GET', '/municipal/summary', { token: tokens.officer });
   assert.equal(summary.body.activeAnomalies, 0);
-  assert.equal(summary.body.sitesWithoutAssessment, 4);
+  assert.equal(summary.body.sitesWithoutAssessment, 8);
   const status = await api('GET', '/system/status', { token: tokens.citizen });
   assert.equal(status.body.model.ready, false);
   assert.equal(status.body.sensors.simulated, true);
   model.state.ready = true;
-  resetModelInfoCache();
+  await stack.resetModelCache();
 });
 
 test('a simulated dust event is flagged and stored with sensor values and model version', async () => {
   const sim = await api('GET', '/municipal/simulator', { token: tokens.officer });
-  ctx.dusty = sim.body.sites.find((s) => s.code === 'DEL-ROH-A');
-  ctx.calm = sim.body.sites.find((s) => s.code === 'DEL-DWK-A');
+  ctx.dusty = sim.body.sites.find((s) => s.code === 'MUM-AND-01');
+  ctx.calm = sim.body.sites.find((s) => s.code === 'MUM-BAN-01');
   const set = await api('PUT', `/municipal/simulator/sites/${ctx.dusty.id}`, { token: tokens.officer, json: { scenario: 'DUST_EVENT' } });
   assert.equal(set.body.isAnomaly, true);
   await api('POST', '/municipal/monitoring/run', { token: tokens.officer });
 
-  const locality = await api('GET', '/localities/DEL-ROH', { token: tokens.citizen });
+  const locality = await api('GET', '/localities/MUM-AND', { token: tokens.citizen });
   const site = locality.body.sites.find((s) => s.id === ctx.dusty.id);
   const e = site.latest.evaluation;
   assert.equal(site.latest.simulated, true);
@@ -123,29 +80,58 @@ test('a simulated dust event is flagged and stored with sensor values and model 
   assert.ok(e.siteTimestamp && e.backgroundTimestamp);
 
   const flagged = await api('GET', '/municipal/flagged-sites', { token: tokens.officer });
-  assert.deepEqual(flagged.body.sites.filter((s) => s.flagged).map((s) => s.code), ['DEL-ROH-A']);
+  assert.deepEqual(flagged.body.sites.filter((s) => s.flagged).map((s) => s.code), ['MUM-AND-01']);
   const history = await api('GET', `/sites/${ctx.dusty.id}/history?hours=1`, { token: tokens.citizen });
   assert.ok(history.body.points.some((p) => p.anomalies > 0));
 });
 
-test('stale or incompatible readings never reach the model', async () => {
-  const okh = (await api('GET', '/municipal/simulator', { token: tokens.officer })).body.sites.find((s) => s.code === 'DEL-OKH-A');
-  for (const [scenario, pattern] of [['STALE_SENSOR', /stale/], ['INCOMPATIBLE_UNIT', /incompatible unit/]]) {
-    const before = model.state.predictCalls.length;
-    const set = await api('PUT', `/municipal/simulator/sites/${okh.id}`, { token: tokens.officer, json: { scenario } });
-    assert.equal(set.body.evaluationStatus, 'INPUT_REJECTED');
-    assert.equal(set.body.isAnomaly, null);
-    assert.equal(model.state.predictCalls.length, before, `${scenario} must not call /predict`);
-    const latest = await prisma.anomalyEvaluation.findFirst({ where: { siteId: okh.id }, orderBy: { evaluatedAt: 'desc' } });
-    assert.match(latest.reason, pattern);
+test('device and context problems are reported as such and never reach the model', async () => {
+  const sim = (await api('GET', '/municipal/simulator', { token: tokens.officer })).body;
+  const kurla = sim.sites.find((s) => s.code === 'MUM-KUR-01');
+  assert.deepEqual(sim.scenarios.map((s) => s.id), ['NORMAL', 'DUST_EVENT', 'FLATLINE', 'STALE_READINGS', 'INVALID_VALUES', 'CONNECTIVITY_FAILURE', 'BACKGROUND_OUTAGE', 'WEATHER_OUTAGE']);
+  const set = (scenario) => api('PUT', `/municipal/simulator/sites/${kurla.id}`, { token: tokens.officer, json: { scenario } });
+
+  for (const [scenario, pattern] of [
+    ['STALE_READINGS', /stale/],
+    ['INVALID_VALUES', /not usable.*PM10 is negative/],
+    ['BACKGROUND_OUTAGE', /No background PM10 observation/],
+    ['WEATHER_OUTAGE', /Wind speed and direction are not available/],
+  ]) {
+    const calls = model.state.predictCalls.length;
+    const result = (await set(scenario)).body;
+    assert.equal(result.evaluationStatus, 'INPUT_REJECTED', scenario);
+    assert.equal(result.isAnomaly, null);
+    assert.match(result.reason, pattern);
+    assert.equal(model.state.predictCalls.length, calls, `${scenario} must not call /predict`);
   }
-  await api('PUT', `/municipal/simulator/sites/${okh.id}`, { token: tokens.officer, json: { scenario: 'NORMAL' } });
+
+  // The raw reading is kept even though no background value existed, and nothing was invented for it.
+  const noBackground = await prisma.sensorObservation.findFirst({
+    where: { siteId: kurla.id, evaluation: { reason: { contains: 'No background' } } }, include: { deviceReading: true },
+  });
+  assert.ok(noBackground.deviceReading.pm10 > 0);
+  assert.equal(noBackground.backgroundValue, null);
+  assert.equal(noBackground.backgroundUgm3, null);
+
+  const offline = (await set('CONNECTIVITY_FAILURE')).body;
+  assert.equal(offline.sent, 0);
+  assert.match(offline.notSent, /offline/);
+  assert.equal(offline.evaluationStatus, null);
+
+  // A flatline is recognised once the device has repeated one value for the configured run length.
+  await prisma.simulatorState.update({ where: { siteId: kurla.id }, data: { scenario: 'FLATLINE' } });
+  const [flat] = await stack.simulator.publishSimulatedReadings({ siteIds: [kurla.id], minutes: 12, at: new Date(Date.now() - 20 * 60_000) });
+  assert.equal(flat.body.accepted, 12);
+  assert.equal(flat.body.evaluations.INPUT_REJECTED, 3);
+  const flatlined = await prisma.anomalyEvaluation.findFirst({ where: { siteId: kurla.id, reason: { contains: 'flatlined' } } });
+  assert.ok(flatlined);
+  await set('NORMAL');
 });
 
 test('citizen reports the flagged site and anomaly evidence is attached automatically', async () => {
   const created = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'DEL-ROH', siteId: ctx.dusty.id, description: 'Thick dust cloud, no water sprinkling or covers on the debris.' }),
+    form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Thick dust cloud, no water sprinkling or covers on the debris.' }),
   });
   assert.equal(created.status, 201);
   const c = created.body.complaint;
@@ -166,7 +152,7 @@ test('citizen reports the flagged site and anomaly evidence is attached automati
 test('reporting works without an anomaly flag and without a listed site', async () => {
   const calm = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'DEL-DWK', siteId: ctx.calm.id, description: 'Visible dust from uncovered sand piles near the gate.' }),
+    form: complaintForm({ localityCode: 'MUM-BAN', siteId: ctx.calm.id, description: 'Visible dust from uncovered sand piles near the gate.' }),
   });
   assert.equal(calm.status, 201);
   assert.equal(calm.body.complaint.hasAnomalyEvidence, false);
@@ -176,7 +162,7 @@ test('reporting works without an anomaly flag and without a listed site', async 
 
   const unlisted = await api('POST', '/complaints', {
     token: tokens.other,
-    form: complaintForm({ localityCode: 'DEL-ANV', description: 'Demolition work with heavy dust behind the market.', locationText: 'Lane behind the main market', latitude: 28.65, longitude: 77.31 }),
+    form: complaintForm({ localityCode: 'MUM-POW', description: 'Demolition work with heavy dust behind the market.', locationText: 'Lane behind the main market', latitude: 19.12, longitude: 72.91 }),
   });
   assert.equal(unlisted.status, 201);
   assert.equal(unlisted.body.complaint.site, null);
@@ -184,18 +170,18 @@ test('reporting works without an anomaly flag and without a listed site', async 
 });
 
 test('complaint validation', async () => {
-  const noPhoto = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'DEL-ROH', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, []) });
+  const noPhoto = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, []) });
   assert.equal(noPhoto.status, 400);
   assert.ok(noPhoto.body.error.fields.photos);
   const notImage = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'DEL-ROH', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, [{ name: 'x.png', data: Buffer.from('<script>alert(1)</script>'), type: 'image/png' }]),
+    form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, [{ name: 'x.png', data: Buffer.from('<script>alert(1)</script>'), type: 'image/png' }]),
   });
   assert.equal(notImage.status, 400);
-  const bad = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'DEL-ROH', description: 'short' }) });
+  const bad = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-AND', description: 'short' }) });
   assert.equal(bad.status, 400);
   assert.ok(bad.body.error.fields.description && bad.body.error.fields.locationText);
-  const wrongLocality = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'DEL-OKH', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }) });
+  const wrongLocality = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-KUR', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }) });
   assert.equal(wrongLocality.status, 400);
 });
 
@@ -218,7 +204,7 @@ test('municipal inbox: search and filters', async () => {
   assert.ok(byRef.body.complaints.some((c) => c.id === ctx.calmComplaint.id));
   const byText = await api('GET', '/municipal/complaints?q=sprinkling', { token: tokens.officer });
   assert.deepEqual(byText.body.complaints.map((c) => c.id), [ctx.flaggedComplaint.id]);
-  const byLocality = await api('GET', '/municipal/complaints?locality=DEL-ANV&status=SUBMITTED', { token: tokens.officer });
+  const byLocality = await api('GET', '/municipal/complaints?locality=MUM-POW&status=SUBMITTED', { token: tokens.officer });
   assert.deepEqual(byLocality.body.complaints.map((c) => c.id), [ctx.otherComplaint.id]);
   assert.equal((await api('GET', '/municipal/complaints?status=NOPE', { token: tokens.officer })).status, 400);
 });
@@ -298,6 +284,6 @@ test('lifecycle: rejection needs a reason; dashboard totals add up', async () =>
   const analytics = (await api('GET', '/municipal/analytics?hours=1', officer)).body;
   assert.equal(analytics.simulated, true);
   assert.equal(analytics.localities.length, 4);
-  assert.ok(analytics.localities.find((l) => l.code === 'DEL-ROH').anomalies >= 1);
+  assert.ok(analytics.localities.find((l) => l.code === 'MUM-AND').anomalies >= 1);
   assert.equal(analytics.complaintsByStatus.RESOLVED, 1);
 });

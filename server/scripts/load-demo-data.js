@@ -1,24 +1,29 @@
-// Load a usable demo state: a week of hourly readings from the synthetic
-// dataset, each evaluated by the REAL model service, plus a few sample
-// complaints at different lifecycle stages.
+// Load demonstration history: simulated device readings for the past days, each
+// evaluated by the REAL model service, plus a few sample complaints.
 //
-//   node scripts/load-demo-data.js [--days 7] [--reset] [--no-complaints]
+//   node scripts/load-demo-data.js [--days 7] [--no-complaints]
 //
-// --reset deletes existing readings and evaluations first (complaints are kept
-// unless they are demo complaints created by this script).
-// Nothing is stored unless the model actually answers.
+// This is the only place where a past reading is evaluated: the model accepts
+// only fresh timestamps, so each one is sent with the current time and stored
+// against the time it describes (see evaluateReading). Live readings never take
+// this path; they go through the ingestion API.
+// Repeatable: readings that already exist are skipped. Nothing is deleted.
 import zlib from 'node:zlib';
 import { config } from '../src/config.js';
 import { prisma } from '../src/db.js';
 import { toAttachmentRows } from '../src/lib/uploads.js';
 import { addEvidence, addNote, captureSiteEvidence, changeStatus } from '../src/services/complaints.js';
+import { assessQuality } from '../src/services/ingestion.js';
+import { simulateReading } from '../src/services/mockSensorProvider.js';
 import { getModelInfo } from '../src/services/modelClient.js';
-import { evaluateSite, sensorProvider } from '../src/services/monitoring.js';
+import { evaluateReading } from '../src/services/monitoring.js';
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
-const days = Number(args[args.indexOf('--days') + 1]) > 0 && args.includes('--days') ? Number(args[args.indexOf('--days') + 1]) : 7;
+const daysArg = Number(args[args.indexOf('--days') + 1]);
+const days = args.includes('--days') && daysArg > 0 ? daysArg : 7;
 const HOUR_MS = 3_600_000;
+const QUARTER_MS = 900_000;
 const DEMO_PREFIX = 'Demo report: ';
 
 // Plain placeholder image so demo complaints have an attachment. Not a real photograph.
@@ -53,37 +58,53 @@ function placeholderPng(width, height, [r, g, b]) {
   ]);
 }
 
-async function backfill(sites) {
-  if (flag('--reset')) {
-    await prisma.complaint.updateMany({ data: { anomalyEvaluationId: null } });
-    await prisma.anomalyEvaluation.deleteMany();
-    await prisma.sensorObservation.deleteMany();
-    await prisma.simulatorState.deleteMany();
-    console.log('Cleared existing readings and evaluations.');
-  }
-  const currentHour = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
-  const earliest = await prisma.sensorObservation.findFirst({ orderBy: { receivedAt: 'asc' } });
-  const end = Math.min(currentHour, earliest ? Math.floor(earliest.receivedAt.getTime() / HOUR_MS) * HOUR_MS : currentHour);
-  const start = currentHour - days * 24 * HOUR_MS;
+// A few past dust episodes so the history is not uniformly calm. Deterministic per site.
+function historicalScenario(siteIndex, time) {
+  const hoursAgo = (Date.now() - time) / HOUR_MS;
+  const episodes = [[1, 30, 33], [4, 52, 54], [6, 9, 11], [2, 100, 103]]; // [site index, from, to] in hours ago
+  return episodes.some(([i, from, to]) => i === siteIndex && hoursAgo >= from && hoursAgo < to) ? 'DUST_EVENT' : 'NORMAL';
+}
+
+async function backfill(devices) {
+  const now = Date.now();
+  const start = Math.floor((now - days * 24 * HOUR_MS) / HOUR_MS) * HOUR_MS;
+  // Hourly for older history, every 15 minutes for the most recent day. Stop short of "now":
+  // the live simulator owns the present.
+  const times = [];
+  for (let t = start; t < now - 2 * QUARTER_MS; t += (now - t <= 24 * HOUR_MS ? QUARTER_MS : HOUR_MS)) times.push(t);
+
   const counts = {};
+  let created = 0;
   let anomalies = 0;
-  for (let hour = start; hour < end; hour += HOUR_MS) {
-    for (const site of sites) {
-      const evaluation = await evaluateSite(site, { at: new Date(hour) });
+  for (const [index, device] of devices.entries()) {
+    for (const time of times) {
+      const r = simulateReading({ site: device.site, localityCode: device.site.locality.code, scenario: historicalScenario(index, time), at: new Date(time) });
+      const observedAt = new Date(r.timestamp);
+      const exists = await prisma.deviceReading.findUnique({
+        where: { deviceId_observedAt_intervalSeconds: { deviceId: device.id, observedAt, intervalSeconds: r.interval_seconds } },
+      });
+      if (exists) continue;
+      const reading = await prisma.deviceReading.create({
+        data: {
+          deviceId: device.id, siteId: device.siteId, observedAt, intervalSeconds: r.interval_seconds,
+          pm25: r.pm25, pm10: r.pm10, temperatureC: r.temperature_c, humidityPct: r.humidity_pct, unit: r.unit,
+          pm25Ugm3: r.pm25, pm10Ugm3: r.pm10, reportedStatus: r.status, provenance: 'SIMULATED',
+          ...assessQuality(r, r.pm10, r.pm25), payload: r, receivedAt: observedAt,
+        },
+      });
+      const evaluation = await evaluateReading(reading.id, { relabelForHistory: true });
+      if (evaluation.status === 'MODEL_UNAVAILABLE') throw new Error(`Model became unavailable during backfill: ${evaluation.reason}`);
       counts[evaluation.status] = (counts[evaluation.status] || 0) + 1;
       if (evaluation.isAnomaly) anomalies += 1;
-      if (evaluation.status === 'MODEL_UNAVAILABLE') throw new Error(`Model became unavailable during backfill: ${evaluation.reason}`);
+      created += 1;
     }
   }
-  const hours = Math.max(0, (end - start) / HOUR_MS);
-  console.log(`Backfilled ${hours} hours x ${sites.length} sites:`, counts, `(${anomalies} anomalous readings)`);
-  // One live reading so "now" is populated without waiting for the scheduler.
-  for (const site of sites) await evaluateSite(site);
+  console.log(`History: ${created} simulated readings across ${devices.length} devices over ${days} days`, counts, `(${anomalies} PM10 excess flags)`);
 }
 
 async function demoComplaints(sites) {
-  if (await prisma.complaint.count({ where: { description: { startsWith: DEMO_PREFIX } } })) {
-    console.log('Demo complaints already exist; skipping.');
+  if (await prisma.complaint.count({ where: { description: { startsWith: DEMO_PREFIX }, locality: { active: true } } })) {
+    console.log('Demo complaints already exist for the current localities; skipping.');
     return;
   }
   const users = Object.fromEntries((await prisma.user.findMany()).map((u) => [u.email, u]));
@@ -117,19 +138,19 @@ async function demoComplaints(sites) {
     return complaint.id;
   };
 
-  await create({ siteCode: 'DEL-ROH-A', hoursAgo: 1, colour: [196, 170, 130],
+  await create({ siteCode: 'MUM-AND-01', hoursAgo: 1, colour: [196, 170, 130],
     text: 'Dust blowing across the road from uncovered excavated soil. No water sprinkling seen since morning.' });
 
-  const review = await create({ siteCode: 'DEL-OKH-A', hoursAgo: 6, colour: [176, 160, 140],
+  const review = await create({ siteCode: 'MUM-KUR-01', hoursAgo: 6, colour: [176, 160, 140],
     text: 'Trucks leaving the site without covers, leaving a trail of dust on the service lane.' });
   await changeStatus(review, officer, { status: 'UNDER_REVIEW' });
 
-  const assigned = await create({ siteCode: 'DEL-ANV-A', hoursAgo: 20, colour: [188, 150, 118],
-    text: 'Demolition debris piled near the boundary wall with no barricade sheets. Dust reaches the bus bays.' });
+  const assigned = await create({ siteCode: 'MUM-BAN-02', hoursAgo: 20, colour: [188, 150, 118],
+    text: 'Demolition debris piled near the boundary wall with no barricade sheets. Dust reaches the bus stop.' });
   await changeStatus(assigned, officer, { status: 'UNDER_REVIEW' });
   await changeStatus(assigned, officer, { status: 'INSPECTION_ASSIGNED', officerId: inspector.id, note: 'Please check barricading and debris cover.' });
 
-  const resolved = await create({ siteCode: 'DEL-DWK-A', hoursAgo: 50, colour: [170, 165, 150],
+  const resolved = await create({ siteCode: 'MUM-POW-01', hoursAgo: 50, colour: [170, 165, 150],
     text: 'Cutting and grinding work in the open without wet suppression. Fine dust settling on parked vehicles.' });
   await changeStatus(resolved, officer, { status: 'UNDER_REVIEW' });
   await changeStatus(resolved, officer, { status: 'INSPECTION_ASSIGNED', officerId: inspector.id });
@@ -144,8 +165,8 @@ async function demoComplaints(sites) {
     correctiveAction: 'Contractor instructed to use wet cutting and misting. Compliance to be re-checked in 7 days.',
   });
 
-  const rejected = await create({ localityCode: 'DEL-ROH', hoursAgo: 30, colour: [182, 176, 160],
-    locationText: 'Service road near the sector market',
+  const rejected = await create({ localityCode: 'MUM-AND', hoursAgo: 30, colour: [182, 176, 160],
+    locationText: 'Service road near the station',
     text: 'Dust from road sweeping in the morning, not from a construction site.' });
   await changeStatus(rejected, officer, { status: 'UNDER_REVIEW' });
   await changeStatus(rejected, officer, { status: 'REJECTED', note: 'Not related to construction activity. Forwarded to the sanitation department.' });
@@ -154,15 +175,17 @@ async function demoComplaints(sites) {
 }
 
 async function main() {
-  sensorProvider.init();
   const info = await getModelInfo({ fresh: true });
   if (!info.ready) throw new Error(`Model service at ${config.modelApiUrl} is not ready (${info.reason}). Nothing was loaded.`);
   console.log(`Model: ${info.version}`);
-  console.log(`Sensor source: ${sensorProvider.name}`);
-  const sites = await prisma.site.findMany({ include: { locality: true }, orderBy: { code: 'asc' } });
-  if (flag('--reset')) await prisma.complaint.deleteMany({ where: { description: { startsWith: DEMO_PREFIX } } });
-  await backfill(sites);
-  if (!flag('--no-complaints')) await demoComplaints(sites);
+  const devices = await prisma.device.findMany({
+    where: { provenance: 'SIMULATED', status: 'ACTIVE', site: { active: true } },
+    include: { site: { include: { locality: true } } },
+    orderBy: { deviceId: 'asc' },
+  });
+  if (devices.length === 0) throw new Error('No simulated devices found. Run `npm run db:seed` first.');
+  await backfill(devices);
+  if (!flag('--no-complaints')) await demoComplaints(devices.map((d) => d.site));
 }
 
 main()

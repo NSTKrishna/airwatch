@@ -26,6 +26,8 @@ export function evaluationView(e) {
     dynamicBarrier: e.dynamicBarrier,
     interpretation: e.interpretation,
     features: e.features,
+    // Inputs outside the range the model was trained on; the verdict is less reliable when present.
+    domainWarnings: e.domainWarnings ?? [],
     model: e.modelVersion
       ? { version: e.modelVersion, algorithm: e.modelAlgorithm, dataSource: e.modelDataSource, syntheticOnly: e.modelSyntheticOnly }
       : null,
@@ -34,33 +36,62 @@ export function evaluationView(e) {
 
 export function observationView(o) {
   if (!o) return null;
+  const pairing = o.pairing || {};
   return {
     id: o.id,
+    // SIMULATED, or DEVICE for an authenticated physical monitor.
     dataSource: o.dataSource,
     simulated: o.dataSource === 'SIMULATED',
     pollutant: o.pollutant,
     receivedAt: o.receivedAt,
-    background: { sensorId: o.backgroundSensorId, value: o.backgroundValue, unit: o.backgroundUnit, ugm3: o.backgroundUgm3, timestamp: o.backgroundTimestamp },
-    site: { sensorId: o.siteSensorId, value: o.siteValue, unit: o.siteUnit, ugm3: o.siteUgm3, timestamp: o.siteTimestamp },
-    weather: { temperatureC: o.temperatureC, humidityPct: o.humidityPct, windSpeedMs: o.windSpeedMs, windDirectionDeg: o.windDirectionDeg },
+    intervalSeconds: o.intervalSeconds,
+    // `background` is null-valued when no compatible background observation existed.
+    background: {
+      sensorId: o.backgroundSensorId, value: o.backgroundValue, unit: o.backgroundUnit, ugm3: o.backgroundUgm3, timestamp: o.backgroundTimestamp,
+      source: o.backgroundSource, provenance: pairing.background?.provenance ?? null,
+    },
+    site: { sensorId: o.siteSensorId, value: o.siteValue, unit: o.siteUnit, ugm3: o.siteUgm3, pm25Ugm3: o.sitePm25Ugm3, timestamp: o.siteTimestamp },
+    weather: {
+      temperatureC: o.temperatureC, humidityPct: o.humidityPct, windSpeedMs: o.windSpeedMs, windDirectionDeg: o.windDirectionDeg,
+      source: o.weatherSource, provenance: pairing.weather?.provenance ?? null,
+    },
     evaluation: evaluationView(o.evaluation),
   };
 }
 
-export const siteSummary = (s) => ({
-  id: s.id, code: s.code, name: s.name, address: s.address, latitude: s.latitude, longitude: s.longitude,
-  distanceToBackgroundM: s.distanceToBackgroundM,
-  locality: s.locality ? { code: s.locality.code, name: s.locality.name } : undefined,
-  station: s.station ? { code: s.station.code, name: s.station.name, latitude: s.station.latitude, longitude: s.station.longitude } : undefined,
+const stationView = (s) => ({
+  code: s.code, name: s.name, latitude: s.latitude, longitude: s.longitude, provenance: s.provenance, simulated: s.provenance === 'SIMULATED', operator: s.operator,
 });
+
+export const siteSummary = (s) => {
+  // The active device; a physical monitor takes precedence over the simulated stand-in.
+  const active = s.devices?.filter((d) => d.status === 'ACTIVE') ?? [];
+  const device = active.find((d) => d.provenance === 'DEVICE') ?? active[0] ?? s.devices?.[0];
+  return {
+    id: s.id, code: s.code, name: s.name, address: s.address, latitude: s.latitude, longitude: s.longitude,
+    distanceToBackgroundM: s.distanceToBackgroundM,
+    // A demonstration site, not a real construction project.
+    simulated: s.simulated,
+    locality: s.locality ? { code: s.locality.code, name: s.locality.name, city: s.locality.city } : undefined,
+    station: s.station ? stationView(s.station) : undefined,
+    device: device ? {
+      deviceId: device.deviceId, provenance: device.provenance, manufacturer: device.manufacturer, model: device.model,
+      samplingIntervalSeconds: device.samplingIntervalSeconds, lastSeenAt: device.lastSeenAt, reportedStatus: device.lastReportedStatus,
+      publishAllowed: device.publishAllowed,
+    } : null,
+  };
+};
+export { stationView };
 
 /** Latest observation (with its evaluation) for each site id. */
 export async function latestObservations(siteIds) {
   if (siteIds.length === 0) return new Map();
+  // "Latest" means the most recent observation time, not the most recent upload:
+  // a late batch must not displace a newer reading.
   const rows = await prisma.$queryRaw`
     SELECT DISTINCT ON ("siteId") id FROM "SensorObservation"
     WHERE "siteId" IN (${Prisma.join(siteIds)})
-    ORDER BY "siteId", "receivedAt" DESC`;
+    ORDER BY "siteId", "siteTimestamp" DESC`;
   const observations = await prisma.sensorObservation.findMany({
     where: { id: { in: rows.map((r) => r.id) } },
     include: { evaluation: true },
@@ -68,10 +99,23 @@ export async function latestObservations(siteIds) {
   return new Map(observations.map((o) => [o.siteId, o]));
 }
 
-export async function sitesWithLatest(where = {}) {
-  const sites = await prisma.site.findMany({ where, include: { locality: true, station: true }, orderBy: { code: 'asc' } });
+/**
+ * Active sites with their latest observation.
+ * `publicOnly` applies publication permissions: readings from a device that is not
+ * cleared for publication are withheld (municipal users see everything).
+ */
+export async function sitesWithLatest(where = {}, { publicOnly = false } = {}) {
+  const sites = await prisma.site.findMany({
+    where: { active: true, ...where },
+    include: { locality: true, station: true, devices: true },
+    orderBy: { code: 'asc' },
+  });
   const latest = await latestObservations(sites.map((s) => s.id));
-  return sites.map((s) => ({ ...siteSummary(s), latest: observationView(latest.get(s.id)) }));
+  return sites.map((s) => {
+    const summary = siteSummary(s);
+    const withheld = publicOnly && summary.device && !summary.device.publishAllowed;
+    return { ...summary, withheld: Boolean(withheld), latest: withheld ? null : observationView(latest.get(s.id)) };
+  });
 }
 
 const attachmentView = (a) => ({

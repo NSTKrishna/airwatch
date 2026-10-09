@@ -29,6 +29,23 @@ enum EvaluationStatus {
   MODEL_ERROR
 }
 
+// Where a measurement came from. SIMULATED data is never presented as real.
+enum DataProvenance {
+  SIMULATED
+  DEVICE    // authenticated physical monitor
+  REFERENCE // approved reference station or weather service
+}
+
+enum DeviceStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ReadingQuality {
+  VALID
+  INVALID
+}
+
 enum AttachmentKind {
   CITIZEN_PHOTO
   INSPECTION_EVIDENCE
@@ -55,14 +72,18 @@ model User {
   assignedComplaints Complaint[]      @relation("ComplaintOfficer")
   events             ComplaintEvent[]
   attachments        Attachment[]
+  registeredDevices  Device[]
 }
 
 model Locality {
   id        String @id @default(cuid())
-  code      String @unique
+  code      String  @unique
   name      String
+  city      String  @default("Mumbai")
   latitude  Float
   longitude Float
+  // Inactive localities are kept for the complaints that reference them but are not monitored.
+  active    Boolean @default(true)
 
   stations   Station[]
   sites      Site[]
@@ -77,9 +98,14 @@ model Station {
   latitude   Float
   longitude  Float
   localityId String
+  active     Boolean        @default(true)
+  provenance DataProvenance @default(SIMULATED)
+  operator   String?
 
-  locality Locality @relation(fields: [localityId], references: [id])
-  sites    Site[]
+  locality               Locality                @relation(fields: [localityId], references: [id])
+  sites                  Site[]
+  backgroundObservations BackgroundObservation[]
+  weatherObservations    WeatherObservation[]
 }
 
 model Site {
@@ -94,6 +120,9 @@ model Site {
   // Geometry of the station -> site pair, used to derive model feature inputs.
   distanceToBackgroundM Float
   siteBearingDeg        Float
+  active                Boolean @default(true)
+  // Demonstration site: not a real construction project.
+  simulated             Boolean @default(true)
 
   locality     Locality            @relation(fields: [localityId], references: [id])
   station      Station             @relation(fields: [stationId], references: [id])
@@ -101,26 +130,157 @@ model Site {
   evaluations  AnomalyEvaluation[]
   complaints   Complaint[]
   simulator    SimulatorState?
+  devices      Device[]
+  readings     DeviceReading[]
 }
 
-// Paired readings exactly as received from the sensor provider, plus the
-// platform-canonical (ug/m3) values when the reported unit is convertible.
+// A registered monitor. Only a hash of its credential is stored.
+model Device {
+  id                      String         @id @default(cuid())
+  deviceId                String         @unique
+  siteId                  String
+  manufacturer            String
+  model                   String
+  ownerName               String
+  provenance              DataProvenance
+  samplingIntervalSeconds Int            @default(60)
+  status                  DeviceStatus   @default(ACTIVE)
+  // Whether this device's readings may be shown on the citizen-facing dashboard.
+  publishAllowed          Boolean        @default(false)
+  calibratedAt            DateTime?
+  calibrationNote         String?
+  tokenHash               String         @unique
+  tokenHint               String
+  lastSeenAt              DateTime?
+  lastReportedStatus      String?
+  registeredById          String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  site         Site             @relation(fields: [siteId], references: [id])
+  registeredBy User?            @relation(fields: [registeredById], references: [id])
+  readings     DeviceReading[]
+  batches      IngestionBatch[]
+
+  @@index([siteId])
+}
+
+// One row per ingestion request, including what was refused and why.
+model IngestionBatch {
+  id         String   @id @default(cuid())
+  deviceId   String
+  receivedAt DateTime @default(now())
+  received   Int
+  accepted   Int
+  duplicates Int
+  rejected   Int
+  rejections Json?
+
+  device   Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  readings DeviceReading[]
+
+  @@index([deviceId, receivedAt])
+}
+
+// Raw device telemetry, stored independently of any model evaluation.
+model DeviceReading {
+  id              String         @id @default(cuid())
+  deviceId        String
+  siteId          String
+  batchId         String?
+  observedAt      DateTime
+  intervalSeconds Int
+  pm25            Float?
+  pm10            Float?
+  temperatureC    Float?
+  humidityPct     Float?
+  unit            String
+  pm25Ugm3        Float?
+  pm10Ugm3        Float?
+  reportedStatus  String?
+  provenance      DataProvenance
+  quality         ReadingQuality
+  qualityReason   String?
+  // The reading exactly as the device sent it.
+  payload         Json
+  receivedAt      DateTime       @default(now())
+
+  device      Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  site        Site               @relation(fields: [siteId], references: [id])
+  batch       IngestionBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  observation SensorObservation?
+
+  // Makes retried uploads idempotent.
+  @@unique([deviceId, observedAt, intervalSeconds])
+  @@index([siteId, observedAt])
+}
+
+// Background (reference) PM10 as supplied by the background provider.
+model BackgroundObservation {
+  id              String         @id @default(cuid())
+  stationId       String
+  observedAt      DateTime
+  intervalSeconds Int
+  pm10            Float
+  unit            String
+  pm10Ugm3        Float?
+  provenance      DataProvenance
+  source          String
+  instrument      String?
+  receivedAt      DateTime       @default(now())
+
+  station      Station             @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  observations SensorObservation[]
+
+  @@unique([stationId, observedAt, intervalSeconds])
+}
+
+// Wind as supplied by the weather provider.
+model WeatherObservation {
+  id               String         @id @default(cuid())
+  stationId        String
+  observedAt       DateTime
+  windSpeedMs      Float?
+  windDirectionDeg Float?
+  windConvention   String?
+  provenance       DataProvenance
+  source           String
+  receivedAt       DateTime       @default(now())
+
+  station      Station             @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  observations SensorObservation[]
+
+  @@unique([stationId, observedAt])
+}
+
+// The pairing record: one site reading together with whatever background and
+// weather context could be matched to it. Context fields are null when the
+// corresponding source had nothing compatible; they are never filled in by guessing.
 model SensorObservation {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   siteId              String
   dataSource          String
   pollutant           String
   averaging           String
-  backgroundSensorId  String
-  backgroundValue     Float
-  backgroundUnit      String
-  backgroundTimestamp DateTime
+  backgroundSensorId  String?
+  backgroundValue     Float?
+  backgroundUnit      String?
+  backgroundTimestamp DateTime?
   siteSensorId        String
-  siteValue           Float
-  siteUnit            String
+  siteValue           Float?
+  siteUnit            String?
   siteTimestamp       DateTime
   backgroundUgm3      Float?
   siteUgm3            Float?
+  sitePm25Ugm3        Float?
+  intervalSeconds     Int?
+  deviceReadingId         String? @unique
+  backgroundObservationId String?
+  weatherObservationId    String?
+  backgroundSource        String?
+  weatherSource           String?
+  // Pairing facts: distance, bearing, time offsets and the provenance of each source.
+  pairing                 Json?
   temperatureC        Float?
   humidityPct         Float?
   windSpeedMs         Float?
@@ -128,10 +288,14 @@ model SensorObservation {
   windConvention      String?
   receivedAt          DateTime @default(now())
 
-  site       Site               @relation(fields: [siteId], references: [id])
-  evaluation AnomalyEvaluation?
+  site                  Site                   @relation(fields: [siteId], references: [id])
+  evaluation            AnomalyEvaluation?
+  deviceReading         DeviceReading?         @relation(fields: [deviceReadingId], references: [id], onDelete: SetNull)
+  backgroundObservation BackgroundObservation? @relation(fields: [backgroundObservationId], references: [id], onDelete: SetNull)
+  weatherObservation    WeatherObservation?    @relation(fields: [weatherObservationId], references: [id], onDelete: SetNull)
 
   @@index([siteId, receivedAt])
+  @@index([siteId, siteTimestamp])
   @@index([receivedAt])
 }
 
@@ -168,6 +332,8 @@ model AnomalyEvaluation {
   modelAlgorithm     String?
   modelDataSource    String?
   modelSyntheticOnly Boolean?
+  // Model inputs that fell outside the range the model was trained on.
+  domainWarnings     Json?
 
   observation SensorObservation @relation(fields: [observationId], references: [id])
   site        Site              @relation(fields: [siteId], references: [id])

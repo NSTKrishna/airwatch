@@ -11,7 +11,7 @@ const EXPECTED = 14;
 const MARGIN = 16; // generous so only injected dust events cross the barrier
 
 export async function startModelDouble() {
-  const state = { ready: true, predictCalls: [] };
+  const state = { ready: true, predictCalls: [], failNext: null };
   const server = http.createServer((req, res) => {
     const send = (status, body) => {
       res.writeHead(status, { 'content-type': 'application/json' });
@@ -41,6 +41,12 @@ export async function startModelDouble() {
         if (!state.ready) return send(503, { detail: 'Model artifact is missing' });
         const body = JSON.parse(raw);
         state.predictCalls.push(body);
+        // One-shot failure injection for error-path tests.
+        if (state.failNext) {
+          const mode = state.failNext;
+          state.failNext = null;
+          return mode === 'malformed' ? send(200, { is_anomaly: 'yes' }) : send(mode, { detail: 'Model pipeline could not produce a valid prediction' });
+        }
         const extra = Object.keys(body).filter((k) => !['background', 'site', 'features'].includes(k));
         if (extra.length || FEATURES.some((f) => typeof body.features?.[f] !== 'number')) return send(422, { detail: 'Schema mismatch' });
         const difference = body.site.value - body.background.value;

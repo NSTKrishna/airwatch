@@ -37,7 +37,7 @@ export async function captureSiteEvidence(siteId) {
       where: { siteId, status: 'EVALUATED', isAnomaly: true, evaluatedAt: { gte: since } },
       orderBy: { evaluatedAt: 'desc' },
     }),
-    prisma.sensorObservation.findFirst({ where: { siteId }, orderBy: { receivedAt: 'desc' }, include: { evaluation: true } }),
+    prisma.sensorObservation.findFirst({ where: { siteId }, orderBy: { siteTimestamp: 'desc' }, include: { evaluation: true } }),
   ]);
   return {
     anomalyEvaluationId: anomaly?.id ?? null,
