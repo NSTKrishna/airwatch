@@ -3,11 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Camera, ChevronRight, Clock, TriangleAlert } from 'lucide-react';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
-import { fmtNumber, fmtRelative, fmtTime, verdictOf } from '../../lib/format.js';
+import { domainWarningList, fmtNumber, fmtRelative, fmtTime, noAssessmentReason, verdictOf } from '../../lib/format.js';
 import SiteMap from '../../components/SiteMap.jsx';
 import { DifferenceChart, LevelsChart } from '../../components/charts.jsx';
 import { ReadingComparison } from '../../components/Reading.jsx';
-import { LoadError, Panel, SimulatedTag, Skeleton, VerdictBadge, buttonClass } from '../../components/ui.jsx';
+import { LoadError, Notice, Panel, SourceTag, Skeleton, VerdictBadge, buttonClass } from '../../components/ui.jsx';
 
 const TREND_HOURS = 3;
 
@@ -44,7 +44,7 @@ function SiteRow({ site, selected, onSelect }) {
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <VerdictBadge verdict={verdict} />
             {site.latest?.site.ugm3 != null ? (
-              <span className="num text-[0.8125rem] text-ink-2">{fmtNumber(site.latest.site.ugm3, 0, locale)} {t('common.unit')}</span>
+              <span className="num text-[0.8125rem] text-ink-2">PM10 {fmtNumber(site.latest.site.ugm3, 0, locale)} · PM2.5 {fmtNumber(site.latest.site.pm25Ugm3, 0, locale)} {t('common.unit')}</span>
             ) : null}
           </span>
         </span>
@@ -61,7 +61,8 @@ function SiteDetail({ site }) {
   const evaluation = latest?.evaluation;
   const verdict = verdictOf(latest);
   const evaluated = evaluation?.status === 'EVALUATED';
-  const reasonKey = !latest ? 'NO_DATA' : evaluation?.status || 'MODEL_UNAVAILABLE';
+  const why = noAssessmentReason(site);
+  const warned = verdict !== 'none' ? domainWarningList(evaluation) : '';
   const points = history.data?.points || [];
   const hasTrend = points.length >= 2;
 
@@ -71,24 +72,25 @@ function SiteDetail({ site }) {
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
             <h2 id="site-heading" className="text-lg leading-snug font-semibold">{site.name}</h2>
-            <p className="text-[0.875rem] text-ink-2">{site.address}</p>
+            <p className="text-[0.875rem] text-ink-2">{site.address}{site.simulated ? ` · ${t('monitor.demoSite')}` : ''}</p>
           </div>
           <VerdictBadge verdict={verdict} size="lg" />
         </div>
         <p className="mt-3 text-[0.9375rem] text-ink">
           {verdict === 'flagged' ? t('verdict.flaggedLong')
             : verdict === 'normal' ? t('verdict.normalLong')
-              : t(`verdict.reason.${evaluated ? 'NO_DATA' : reasonKey}`, { reason: evaluation?.reason || '' })}
+              : t(`verdict.reason.${why.key}`, why.vars)}
         </p>
         {verdict === 'flagged' ? <p className="mt-1 text-[0.8125rem] text-ink-2">{t('verdict.disclaimer')}</p> : null}
       </div>
 
       {latest ? (
         <div className="border-t border-line px-4 py-4 sm:px-5">
-          <ReadingComparison background={latest.background.ugm3} site={latest.site.ugm3} evaluation={evaluation} />
+          <ReadingComparison background={latest.background.ugm3} site={latest.site.ugm3} pm25={latest.site.pm25Ugm3} evaluation={verdict === 'none' && evaluated ? null : evaluation} />
+          {warned ? <div className="mt-4"><Notice tone="warn">{t('verdict.domainWarning', { list: warned })}</Notice></div> : null}
           <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.8125rem] text-ink-2">
             <span className="inline-flex items-center gap-1"><Clock className="size-3.5" aria-hidden />{t('monitor.measuredAt', { time: `${fmtTime(latest.site.timestamp, locale)} (${fmtRelative(latest.site.timestamp, locale)})` })}</span>
-            {latest.simulated ? <SimulatedTag /> : null}
+            <SourceTag source={latest.dataSource} />
           </p>
           <details className="group mt-3 text-[0.8125rem]">
             <summary className="inline-flex list-none items-center gap-1 font-medium text-accent [&::-webkit-details-marker]:hidden">
@@ -102,8 +104,12 @@ function SiteDetail({ site }) {
                   <dt>{t('monitor.model')}</dt><dd className="break-all text-ink">{evaluation.model?.version}</dd>
                 </>
               ) : null}
+              {site.device ? <dt className="col-span-2">{t('monitor.device', { id: site.device.deviceId, seconds: site.device.samplingIntervalSeconds })}</dt> : null}
               <dt className="col-span-2">{t('monitor.station', { station: site.station.name, distance: fmtNumber(site.distanceToBackgroundM, 0, locale) })}</dt>
+              {latest.weather.source ? <dt className="col-span-2">{t('monitor.windFrom', { source: latest.weather.source })}</dt> : null}
+              <dd className="col-span-2">{t('monitor.pm25Note')}</dd>
               <dd className="col-span-2">{t('monitor.barrierHelp')}</dd>
+              <dd className="col-span-2">{t('monitor.modelNote')}</dd>
             </dl>
           </details>
         </div>

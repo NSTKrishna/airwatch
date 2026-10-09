@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { Skeleton } from './ui.jsx';
 import { Camera, FileText, FlaskConical, Wind } from 'lucide-react';
 import { useI18n } from '../lib/i18n.jsx';
+import { useApi } from '../lib/useApi.js';
 import { LanguageToggle, Logo, SignOutButton } from './Brand.jsx';
 
 const TABS = [
@@ -13,6 +14,8 @@ const TABS = [
 
 export default function CitizenLayout() {
   const { t } = useI18n();
+  const { data: status } = useApi('/system/status');
+  const mixed = status?.sensors.devices.real > 0;
   return (
     <div className="min-h-dvh pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur-sm">
@@ -32,7 +35,7 @@ export default function CitizenLayout() {
           </div>
         </div>
         <p className="border-t border-warn-line bg-warn-soft px-4 py-1 text-center text-[0.75rem] text-warn">
-          <FlaskConical className="mr-1 inline size-3 -translate-y-px" aria-hidden />{t('common.simulatedLong')}
+          <FlaskConical className="mr-1 inline size-3 -translate-y-px" aria-hidden />{t(mixed ? 'common.mixedSources' : 'common.simulatedLong')}
         </p>
       </header>
 

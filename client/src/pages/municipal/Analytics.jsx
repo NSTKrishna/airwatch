@@ -18,7 +18,7 @@ export default function Analytics() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <p className="mt-1 flex items-center gap-2 text-[0.875rem] text-ink-2">PM10 in µg/m³ <SimulatedTag /></p>
+          <p className="mt-1 flex items-center gap-2 text-[0.875rem] text-ink-2">Concentrations in µg/m³ {data?.simulated ? <SimulatedTag /> : null}</p>
         </div>
         <div role="group" aria-label="Time range" className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5">
           {RANGES.map((r) => (
@@ -50,13 +50,13 @@ export default function Analytics() {
 
           <Panel className="overflow-hidden">
             <h2 className="px-4 pt-4 font-semibold sm:px-5">Locality summary</h2>
-            <p className="px-4 pb-3 text-[0.8125rem] text-ink-2 sm:px-5">Readings from the last {rangeLabel}; complaints are all-time. An anomalous reading is one evaluation above its dynamic barrier, not a confirmed violation.</p>
+            <p className="px-4 pb-3 text-[0.8125rem] text-ink-2 sm:px-5">Readings from the last {rangeLabel}; complaints are all-time. An anomalous reading is one PM10 evaluation above its dynamic barrier, not a confirmed violation. PM2.5 is not assessed by the model.</p>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[52rem] text-[0.875rem]">
+              <table className="w-full min-w-[58rem] text-[0.875rem]">
                 <thead className="border-y border-line bg-paper text-[0.75rem] text-ink-2">
                   <tr>
                     <th scope="col" className="px-4 py-2.5 text-left font-medium sm:px-5">Locality</th>
-                    {['Background', 'Site', 'Avg difference', 'Avg barrier', 'Evaluated', 'Anomalous', 'Anomaly rate', 'Not assessed', 'Complaints', 'Open', 'Resolved'].map((h) => (
+                    {['Background PM10', 'Site PM10', 'Site PM2.5', 'Avg difference', 'Avg barrier', 'Evaluated', 'Anomalous', 'Anomaly rate', 'Not assessed', 'Complaints', 'Open', 'Resolved'].map((h) => (
                       <th key={h} scope="col" className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -67,6 +67,7 @@ export default function Analytics() {
                       <th scope="row" className="px-4 py-3 text-left font-medium sm:px-5">{l.name}</th>
                       <td className="px-3 py-3 text-right">{fmtNumber(l.avgBackground)}</td>
                       <td className="px-3 py-3 text-right">{fmtNumber(l.avgSite)}</td>
+                      <td className="px-3 py-3 text-right">{fmtNumber(l.avgPm25)}</td>
                       <td className="px-3 py-3 text-right">{fmtNumber(l.avgDifference)}</td>
                       <td className="px-3 py-3 text-right">{fmtNumber(l.avgBarrier)}</td>
                       <td className="px-3 py-3 text-right">{l.evaluated}</td>

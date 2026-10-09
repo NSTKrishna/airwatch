@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  CircleCheck, CircleDashed, CircleX, ClipboardCheck, Eye, FlaskConical, Inbox, LoaderCircle, TriangleAlert,
+  CircleCheck, CircleDashed, CircleX, ClipboardCheck, Eye, FlaskConical, Inbox, LoaderCircle, RadioTower, TriangleAlert,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useI18n } from '../lib/i18n.jsx';
@@ -77,15 +77,19 @@ export function LoadError({ error, onRetry }) {
 
 export const Skeleton = ({ className = '' }) => <div className={`skeleton ${className}`} aria-hidden />;
 
-export function SimulatedTag({ className = '' }) {
+/** Where a reading came from: SIMULATED, or DEVICE for an authenticated physical monitor. */
+export function SourceTag({ source = 'SIMULATED', className = '' }) {
   const { t } = useI18n();
+  const real = source === 'DEVICE';
+  const Icon = real ? RadioTower : FlaskConical;
   return (
-    <span title={t('common.simulatedLong')}
-      className={`inline-flex items-center gap-1 rounded-md border border-warn-line bg-warn-soft px-1.5 py-0.5 text-[0.6875rem] font-semibold tracking-wide text-warn uppercase ${className}`}>
-      <FlaskConical className="size-3" aria-hidden />{t('common.simulated')}
+    <span title={t(`source.${real ? 'DEVICE' : 'SIMULATED'}.help`)}
+      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap uppercase ${real ? 'border-[#b9d8d3] bg-accent-soft text-accent-strong' : 'border-warn-line bg-warn-soft text-warn'} ${className}`}>
+      <Icon className="size-3" aria-hidden />{t(`source.${real ? 'DEVICE' : 'SIMULATED'}`)}
     </span>
   );
 }
+export const SimulatedTag = (props) => <SourceTag source="SIMULATED" {...props} />;
 
 const STATUS_STYLE = {
   SUBMITTED: { icon: Inbox, cls: 'bg-mute-soft text-ink-2 border-line' },

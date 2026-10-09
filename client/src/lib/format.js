@@ -25,14 +25,39 @@ export function fmtRelative(value, locale = 'en-IN') {
   return rtf.format(Math.round(seconds / 86400), 'day');
 }
 
+const RECENT_MS = 15 * 60_000;
+
+/** Minutes since the device last produced a reading, or null when it has never reported. */
+export const minutesSince = (latest) => (latest?.site?.timestamp ? Math.floor((Date.now() - new Date(latest.site.timestamp).getTime()) / 60_000) : null);
+
+/** True when the newest reading is too old to describe the present. */
+export const isStale = (latest) => Boolean(latest) && Date.now() - new Date(latest.site.timestamp).getTime() > RECENT_MS;
+
 /** flagged | normal | none, from a site's latest observation. */
 export function verdictOf(latest) {
   const e = latest?.evaluation;
-  if (!e || e.status !== 'EVALUATED') return 'none';
+  if (!e || e.status !== 'EVALUATED' || isStale(latest)) return 'none';
   if (e.isAnomaly && e.active) return 'flagged';
   // An old verdict of either kind is no longer a statement about now.
-  if (!e.isAnomaly && Date.now() - new Date(e.evaluatedAt).getTime() < 15 * 60_000) return 'normal';
+  if (!e.isAnomaly && Date.now() - new Date(e.evaluatedAt).getTime() < RECENT_MS) return 'normal';
   return 'none';
 }
 
 export const STATUS_ORDER = ['SUBMITTED', 'UNDER_REVIEW', 'INSPECTION_ASSIGNED', 'RESOLVED'];
+
+/** Why a site has no current PM10 assessment: a locale key suffix plus its variables. */
+export function noAssessmentReason(site) {
+  if (site.withheld) return { key: 'WITHHELD' };
+  const latest = site.latest;
+  if (!latest) return { key: 'NO_DATA' };
+  if (isStale(latest)) return { key: 'NO_RECENT_DATA', vars: { minutes: minutesSince(latest) } };
+  const e = latest.evaluation;
+  if (!e || e.status === 'EVALUATED') return { key: 'NO_DATA' };
+  return { key: e.status, vars: { reason: e.reason || '' } };
+}
+
+const FEATURE_LABELS = {
+  background_value: 'background PM10', temperature_c: 'temperature', humidity_pct: 'humidity', wind_speed_ms: 'wind speed',
+  distance_to_background_m: 'station distance', relative_wind_alignment: 'wind alignment',
+};
+export const domainWarningList = (evaluation) => (evaluation?.domainWarnings || []).map((w) => FEATURE_LABELS[w.feature] || w.feature).join(', ');

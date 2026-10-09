@@ -37,11 +37,11 @@ function SitePopup({ site }) {
   return (
     <div className="min-w-44">
       <p className="font-semibold">{site.name}</p>
-      <p className="text-ink-2">{site.locality.name} · {site.code}</p>
+      <p className="text-ink-2">{site.locality.name} · {site.code}{site.simulated ? ' · simulated demo site' : ''}</p>
       <div className="mt-1.5"><VerdictBadge verdict={site.verdict} /></div>
       {site.latest ? (
         <p className="num mt-1.5">
-          Site {fmtNumber(site.latest.site.ugm3)} · Background {fmtNumber(site.latest.background.ugm3)} µg/m³
+          PM10 {fmtNumber(site.latest.site.ugm3)} · PM2.5 {fmtNumber(site.latest.site.pm25Ugm3)} · Background {fmtNumber(site.latest.background.ugm3)} µg/m³
           {e?.status === 'EVALUATED' ? <><br />Difference {fmtNumber(e.observedDifference)} vs barrier {fmtNumber(e.dynamicBarrier)}</> : null}
         </p>
       ) : null}
@@ -95,7 +95,7 @@ export default function Overview() {
       {sweepError ? <Notice tone="flag" title={`Sweep failed: ${sweepError}`} /> : null}
       {status && !status.model.ready ? (
         <Notice tone="flag" title="No anomaly assessments are being produced">
-          The model service reports: {status.model.reason}. Readings are still recorded, and citizens can still file reports. Nothing is marked normal or anomalous until the model responds.
+          The model service reports: {status.model.reason}. Readings are still recorded, and citizens can still file reports. Nothing is marked normal or flagged until the model responds.
         </Notice>
       ) : null}
 
@@ -105,7 +105,7 @@ export default function Overview() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section id="flagged" aria-labelledby="map-heading" className="scroll-mt-6">
           <div className="mb-2 flex items-baseline justify-between gap-3">
-            <h2 id="map-heading" className="font-semibold">Flagged construction sites</h2>
+            <h2 id="map-heading" className="font-semibold">Monitoring sites</h2>
             <p className="text-[0.8125rem] text-ink-2">{flaggedSites.length} of {sites.length} sites flagged</p>
           </div>
           {flagged.error && !flagged.data ? <LoadError error={flagged.error} onRetry={flagged.reload} />
@@ -179,7 +179,7 @@ export default function Overview() {
           <h2 className="font-semibold">Average site PM10 by locality, last 6 hours</h2>
           <Link to="/municipal/analytics" className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-accent">Full analytics<ArrowRight className="size-3.5" aria-hidden /></Link>
         </div>
-        <p className="text-[0.8125rem] text-ink-2">µg/m³, simulated readings</p>
+        <p className="text-[0.8125rem] text-ink-2">µg/m³{analytics.data?.simulated ? ', simulated readings' : ''}</p>
         <div className="mt-3">
           {analytics.data ? (
             analytics.data.series.length > 4

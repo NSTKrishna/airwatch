@@ -15,6 +15,7 @@ const Inbox = lazy(() => import('./pages/municipal/Inbox.jsx'));
 const CaseFile = lazy(() => import('./pages/municipal/CaseFile.jsx'));
 const Analytics = lazy(() => import('./pages/municipal/Analytics.jsx'));
 const Simulator = lazy(() => import('./pages/municipal/Simulator.jsx'));
+const Devices = lazy(() => import('./pages/municipal/Devices.jsx'));
 
 function RequireRole({ role }) {
   const { user, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/municipal/complaints" element={<Inbox />} />
           <Route path="/municipal/complaints/:id" element={<CaseFile />} />
           <Route path="/municipal/analytics" element={<Analytics />} />
+          <Route path="/municipal/devices" element={<Devices />} />
           <Route path="/municipal/simulator" element={<Simulator />} />
         </Route>
       </Route>

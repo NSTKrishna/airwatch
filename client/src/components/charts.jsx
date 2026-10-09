@@ -13,7 +13,7 @@ export const SERIES = {
   flag: '#b3261e',
 };
 // Fixed locality order so a locality keeps its colour regardless of filters.
-export const LOCALITY_COLORS = { 'DEL-ANV': '#2a78d6', 'DEL-DWK': '#eb6834', 'DEL-OKH': '#1baf7a', 'DEL-ROH': '#eda100' };
+export const LOCALITY_COLORS = { 'MUM-AND': '#2a78d6', 'MUM-BAN': '#eb6834', 'MUM-KUR': '#1baf7a', 'MUM-POW': '#eda100' };
 
 const AXIS = { stroke: '#c4c0b3', tick: { fill: '#5f6a67', fontSize: 11 }, tickLine: false };
 const GRID = { stroke: '#e8e5dc', vertical: false };

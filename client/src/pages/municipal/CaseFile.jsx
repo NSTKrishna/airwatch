@@ -6,7 +6,7 @@ import { useApi } from '../../lib/useApi.js';
 import { fmtDateTime } from '../../lib/format.js';
 import { ReadingComparison } from '../../components/Reading.jsx';
 import SiteMap from '../../components/SiteMap.jsx';
-import { AuthImage, Button, FormField, LoadError, Notice, Panel, SimulatedTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
+import { AuthImage, Button, FormField, LoadError, Notice, Panel, SourceTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
 
 const STATUS_LABEL = { SUBMITTED: 'Submitted', UNDER_REVIEW: 'Under review', INSPECTION_ASSIGNED: 'Inspection assigned', RESOLVED: 'Resolved', REJECTED: 'Rejected' };
 
@@ -28,18 +28,20 @@ function SensorEvidence({ complaint }) {
   const evaluation = anomaly || snapshot.evaluation;
   const background = anomaly ? anomaly.backgroundValue : snapshot.background?.ugm3;
   const site = anomaly ? anomaly.siteValue : snapshot.site?.ugm3;
-  const simulated = anomaly ? anomaly.dataSource === 'SIMULATED' : snapshot.simulated;
+  const source = anomaly ? anomaly.dataSource : snapshot.dataSource;
+  const warned = (evaluation?.domainWarnings || []).map((w) => w.feature).join(', ');
   const evaluated = evaluation?.status === 'EVALUATED';
   return (
     <div className="mt-3">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <VerdictBadge verdict={anomaly ? 'flagged' : evaluated && !evaluation.isAnomaly ? 'normal' : 'none'} />
-        {simulated ? <SimulatedTag /> : null}
+        <SourceTag source={source} />
         <span className="text-[0.8125rem] text-ink-2">
           {anomaly ? 'Anomaly active when the complaint was filed' : evaluated ? 'No anomaly at filing; reading recorded for reference' : `No assessment at filing: ${evaluation?.reason || 'no reading'}`}
         </span>
       </div>
-      <ReadingComparison background={background} site={site} evaluation={evaluation} />
+      <ReadingComparison background={background} site={site} pm25={anomaly ? undefined : snapshot.site?.pm25Ugm3} evaluation={evaluation} />
+      {warned ? <div className="mt-4"><Notice tone="warn">Inputs outside the model's trained range: {warned}. Treat this result with extra caution.</Notice></div> : null}
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem] text-ink-2">
         <dt>Site reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.siteTimestamp : snapshot.site?.timestamp)}</dd>
         <dt>Background reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.backgroundTimestamp : snapshot.background?.timestamp)}</dd>
@@ -53,7 +55,7 @@ function SensorEvidence({ complaint }) {
           </>
         ) : null}
       </dl>
-      <p className="mt-3 text-[0.8125rem] text-ink-2">{evaluation?.interpretation || 'Evidence for review; not proof of a construction violation'}.</p>
+      <p className="mt-3 text-[0.8125rem] text-ink-2">{evaluation?.interpretation || 'Evidence for review; not proof of a construction violation'}. The model was trained on synthetic Delhi data and is not validated for Mumbai.</p>
     </div>
   );
 }

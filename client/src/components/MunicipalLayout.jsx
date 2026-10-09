@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Skeleton } from './ui.jsx';
-import { ChartNoAxesCombined, CircleCheck, CircleDashed, FlaskConical, Inbox, LayoutDashboard, SlidersHorizontal } from 'lucide-react';
+import { ChartNoAxesCombined, CircleCheck, CircleDashed, FlaskConical, Inbox, LayoutDashboard, RadioTower, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../lib/auth.jsx';
 import { useI18n } from '../lib/i18n.jsx';
 import { useApi } from '../lib/useApi.js';
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/municipal', end: true, label: 'Overview', icon: LayoutDashboard },
   { to: '/municipal/complaints', label: 'Complaints', icon: Inbox },
   { to: '/municipal/analytics', label: 'Analytics', icon: ChartNoAxesCombined },
+  { to: '/municipal/devices', label: 'Devices', icon: RadioTower },
   { to: '/municipal/simulator', label: 'Sensor simulator', icon: SlidersHorizontal },
 ];
 
@@ -26,7 +27,7 @@ function ModelStatus({ status }) {
       <p className="mt-1 break-words text-ink-2">
         {ready ? status.model.version : `${status.model.reason}. Readings are stored without an anomaly assessment.`}
       </p>
-      {ready && status.model.syntheticOnly ? <p className="mt-1 text-ink-3">Trained on synthetic data only.</p> : null}
+      {ready ? <p className="mt-1 text-ink-2">{status.model.limitations}</p> : null}
     </div>
   );
 }
@@ -44,7 +45,7 @@ export default function MunicipalLayout() {
           <Logo />
           <div className="lg:hidden"><SignOutButton compact /></div>
         </div>
-        <p className="hidden px-4 pb-3 text-[0.75rem] text-ink-2 lg:block">Municipal operations</p>
+        <p className="hidden px-4 pb-3 text-[0.75rem] text-ink-2 lg:block">Mumbai operations demo</p>
         <nav aria-label="Primary" className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
           {NAV.map(({ to, end, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={end}
@@ -68,7 +69,7 @@ export default function MunicipalLayout() {
       <div className="min-w-0">
         <p className="border-b border-warn-line bg-warn-soft px-4 py-1 text-[0.75rem] text-warn lg:px-8">
           <FlaskConical className="mr-1 inline size-3 -translate-y-px" aria-hidden />
-          Sensor readings are simulated. Site names and positions are illustrative.
+          Demonstration system, not an official BMC service. {status?.sensors.devices.real ? 'Most monitoring sites are simulated; each reading is labelled with its source.' : 'Monitoring sites, devices and readings are simulated.'}
         </p>
         {status && !status.model.ready ? (
           <p className="border-b border-flag-line bg-flag-soft px-4 py-1.5 text-[0.8125rem] text-flag lg:hidden">

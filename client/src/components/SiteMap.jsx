@@ -48,7 +48,7 @@ export default function SiteMap({ sites, stations = [], selectedId, onSelect, re
     () => [...sites, ...stations].map((p) => [p.latitude, p.longitude]),
     [sites, stations]);
   const fitKey = [...sites.map((s) => s.id), ...stations.map((s) => s.code)].join('|');
-  const centre = points[0] || [28.6139, 77.209];
+  const centre = points[0] || [19.076, 72.8777]; // Mumbai
   return (
     <div className={`overflow-hidden rounded-(--radius-card) border border-line ${className}`} role="region" aria-label={label}>
       <MapContainer center={centre} zoom={12} scrollWheelZoom={false} className="size-full">

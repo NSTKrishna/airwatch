@@ -49,18 +49,20 @@ export function Metric({ label, value, unit, help, strong = false }) {
 }
 
 /** Numbers + scale for one evaluation (or a bare reading when there is no verdict). */
-export function ReadingComparison({ background, site, evaluation }) {
+export function ReadingComparison({ background, site, pm25, evaluation }) {
   const { t, locale } = useI18n();
   const unit = t('common.unit');
   const n = (v) => fmtNumber(v, 1, locale);
   const evaluated = evaluation?.status === 'EVALUATED';
   return (
     <div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
-        <Metric strong label={t('monitor.site')} value={n(site)} unit={unit} />
-        <Metric strong label={t('monitor.background')} value={n(background)} unit={unit} />
+      <dl className={`grid grid-cols-2 gap-x-4 gap-y-4 ${pm25 === undefined ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        <Metric strong label={t('monitor.site')} value={n(site)} unit={typeof site === 'number' ? unit : null} />
+        {pm25 === undefined ? null : <Metric strong label={t('monitor.pm25')} value={n(pm25)} unit={typeof pm25 === 'number' ? unit : null} help={t('monitor.pm25Note')} />}
+        <Metric strong label={t('monitor.background')} value={n(background)} unit={typeof background === 'number' ? unit : null} />
         <Metric label={t('monitor.difference')} unit={unit}
           value={evaluated ? n(evaluation.observedDifference) : (typeof site === 'number' && typeof background === 'number' ? n(site - background) : '–')} />
+        {/* The difference and barrier describe PM10 only. */}
         <Metric label={t('monitor.barrier')} unit={evaluated ? unit : null} help={t('monitor.barrierHelp')} value={evaluated ? n(evaluation.dynamicBarrier) : '–'} />
       </dl>
       {evaluated ? (

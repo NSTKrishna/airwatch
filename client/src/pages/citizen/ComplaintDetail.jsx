@@ -5,7 +5,7 @@ import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
 import { STATUS_ORDER, fmtDateTime } from '../../lib/format.js';
 import { ReadingComparison } from '../../components/Reading.jsx';
-import { AuthImage, LoadError, Notice, Panel, SimulatedTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
+import { AuthImage, LoadError, Notice, Panel, SourceTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
 
 function Progress({ complaint }) {
   const { t, locale } = useI18n();
@@ -116,7 +116,7 @@ export default function ComplaintDetail() {
           </div>
           <p className="mt-4 flex flex-wrap items-center gap-2 text-[0.8125rem] text-ink-2">
             <span className="num">{t('monitor.measuredAt', { time: fmtDateTime(c.anomalyEvidence.siteTimestamp, locale) })}</span>
-            {c.anomalyEvidence.dataSource === 'SIMULATED' ? <SimulatedTag /> : null}
+            <SourceTag source={c.anomalyEvidence.dataSource} />
           </p>
           <p className="mt-2 text-[0.8125rem] text-ink-2">{t('verdict.disclaimer')}</p>
         </Panel>
@@ -125,11 +125,11 @@ export default function ComplaintDetail() {
           <h2 className="font-semibold">{t('detail.snapshot')}</h2>
           <p className="mt-1 text-[0.875rem] text-ink-2">{t('detail.evidenceNone')}</p>
           <div className="mt-4">
-            <ReadingComparison background={snapshot.background?.ugm3} site={snapshot.site?.ugm3} evaluation={snapshot.evaluation} />
+            <ReadingComparison background={snapshot.background?.ugm3} site={snapshot.site?.ugm3} pm25={snapshot.site?.pm25Ugm3} evaluation={snapshot.evaluation} />
           </div>
           <p className="mt-4 flex flex-wrap items-center gap-2 text-[0.8125rem] text-ink-2">
             <span className="num">{t('monitor.measuredAt', { time: fmtDateTime(snapshot.site?.timestamp, locale) })}</span>
-            {snapshot.simulated ? <SimulatedTag /> : null}
+            <SourceTag source={snapshot.dataSource} />
           </p>
         </Panel>
       ) : null}

@@ -1,4 +1,6 @@
 const TOKEN_KEY = 'airwatch.token';
+// Empty in development (Vite proxies /api). In production, the HTTPS origin of the API.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export const tokenStore = {
   get: () => {
@@ -30,7 +32,7 @@ async function request(method, path, { json, form, signal, raw } = {}) {
   if (json) headers['Content-Type'] = 'application/json';
   let response;
   try {
-    response = await fetch(`/api${path}`, { method, headers, body: json ? JSON.stringify(json) : form, signal });
+    response = await fetch(`${API_BASE}/api${path}`, { method, headers, body: json ? JSON.stringify(json) : form, signal });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
     throw new ApiError(0, 'Cannot reach the AirWatch server. Check your connection and try again.');
@@ -49,6 +51,7 @@ export const api = {
   get: (path, opts) => request('GET', path, opts),
   post: (path, json, opts) => request('POST', path, { json: json ?? {}, ...opts }),
   put: (path, json, opts) => request('PUT', path, { json, ...opts }),
+  patch: (path, json, opts) => request('PATCH', path, { json, ...opts }),
   upload: (path, form) => request('POST', path, { form }),
   blob: async (path) => (await request('GET', path.replace(/^\/api/, ''), { raw: true })).blob(),
 };
