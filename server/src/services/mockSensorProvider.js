@@ -9,7 +9,7 @@ import { prisma } from '../db.js';
 
 export const DATA_SOURCE = 'SIMULATED';
 export const SCENARIOS = Object.freeze({
-  NORMAL: 'Typical site activity',
+  NORMAL: 'Reading as supplied by the sensor source',
   DUST_EVENT: 'Injected construction dust episode',
   STALE_SENSOR: 'Site sensor stops reporting (last reading 2 h old)',
   INCOMPATIBLE_UNIT: 'Site sensor reports an AQI index instead of a concentration',
@@ -86,9 +86,11 @@ function simulate(site, localityCode, scenario, now) {
 export const mockSensorProvider = {
   name: 'mock',
   dataSource: DATA_SOURCE,
+  description: 'Generated readings (no dataset)',
+  init() {},
   /** @param {{id: string, code: string, siteBearingDeg: number, locality: {code: string}}} site */
-  async getPairedReading(site, now = new Date()) {
-    const state = await prisma.simulatorState.findUnique({ where: { siteId: site.id } });
+  async getPairedReading(site, now = new Date(), { ignoreScenario = false } = {}) {
+    const state = ignoreScenario ? null : await prisma.simulatorState.findUnique({ where: { siteId: site.id } });
     const scenario = state && SCENARIOS[state.scenario] ? state.scenario : 'NORMAL';
     return simulate(site, site.locality.code, scenario, now);
   },

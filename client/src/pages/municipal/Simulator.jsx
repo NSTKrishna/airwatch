@@ -37,8 +37,9 @@ export default function Simulator() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sensor simulator</h1>
         <p className="mt-1 max-w-[70ch] text-ink-2">
-          AirWatch has no live sensor feed yet. This page controls the mock sensors so the full workflow can be tested: pick a scenario for a site and the next reading follows it. The simulator only produces readings; any verdict still comes from the model.
+          AirWatch has no live sensor feed yet. Readings come from a simulated source, and this page lets you override it per site so the full workflow can be tested. The simulator only produces readings; any verdict still comes from the model.
         </p>
+        {data ? <p className="mt-2 text-[0.875rem] text-ink-2">Current source: <span className="font-medium text-ink">{data.providerDescription}</span></p> : null}
       </div>
       <Notice tone="warn" icon={FlaskConical} title="Everything on this page is simulated">Changes here affect what citizens and officers see on the dashboards.</Notice>
       {failure ? <Notice tone="flag" title={failure} /> : null}
@@ -71,7 +72,7 @@ export default function Simulator() {
             </div>
           </Panel>
           <p className="text-[0.8125rem] text-ink-2">
-            Sensors are read automatically every {data.monitorIntervalSeconds || '–'} seconds. A normal scenario can still occasionally cross the barrier: the model's calibration accepts roughly a 5% false-alarm rate on baseline readings.
+            Sensors are read automatically every {data.monitorIntervalSeconds || '–'} seconds. Without any override a site can still be flagged: the dataset contains its own dust incidents, and the model's calibration accepts roughly a 5% false-alarm rate on normal readings.
           </p>
         </>
       )}

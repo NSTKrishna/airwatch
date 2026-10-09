@@ -6,24 +6,20 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 // Locality centres and station -> site geometry follow the synthetic demo
-// dataset the model was trained on. Site names and positions are illustrative,
-// not real construction projects.
+// dataset the model was trained on. Each locality has the single background/site pair the dataset
+// contains. Site names and positions are illustrative, not real construction projects.
 const LOCALITIES = [
   { code: 'DEL-ROH', name: 'Rohini', latitude: 28.7383, longitude: 77.0822, sites: [
     { suffix: 'A', name: 'Sector 18 Residential Towers', address: 'Sector 18, Rohini', distance: 280, bearing: 34 },
-    { suffix: 'B', name: 'Outer Ring Road Flyover Works', address: 'Near Madhuban Chowk, Rohini', distance: 350, bearing: 205 },
   ] },
   { code: 'DEL-DWK', name: 'Dwarka', latitude: 28.5921, longitude: 77.046, sites: [
     { suffix: 'A', name: 'Sector 21 Metro Depot Extension', address: 'Sector 21, Dwarka', distance: 410, bearing: 102 },
-    { suffix: 'B', name: 'Sector 10 Commercial Complex', address: 'Sector 10, Dwarka', distance: 300, bearing: 290 },
   ] },
   { code: 'DEL-OKH', name: 'Okhla', latitude: 28.5355, longitude: 77.2724, sites: [
     { suffix: 'A', name: 'Okhla Phase II Warehouse Block', address: 'Okhla Industrial Area Phase II', distance: 240, bearing: 16 },
-    { suffix: 'B', name: 'Jasola Office Tower', address: 'Jasola District Centre', distance: 380, bearing: 150 },
   ] },
   { code: 'DEL-ANV', name: 'Anand Vihar', latitude: 28.6469, longitude: 77.316, sites: [
     { suffix: 'A', name: 'ISBT Redevelopment Works', address: 'Anand Vihar ISBT', distance: 360, bearing: 68 },
-    { suffix: 'B', name: 'Karkardooma Housing Project', address: 'Karkardooma Institutional Area', distance: 260, bearing: 250 },
   ] },
 ];
 
@@ -62,6 +58,17 @@ async function main() {
     }
   }
 
+  // Retire sites that are no longer in the reference list, unless a complaint points at them.
+  const wanted = LOCALITIES.flatMap((l) => l.sites.map((s) => `${l.code}-${s.suffix}`));
+  const stale = await prisma.site.findMany({ where: { code: { notIn: wanted }, complaints: { none: {} } } });
+  for (const site of stale) {
+    await prisma.$transaction([
+      prisma.anomalyEvaluation.deleteMany({ where: { siteId: site.id } }),
+      prisma.sensorObservation.deleteMany({ where: { siteId: site.id } }),
+      prisma.site.delete({ where: { id: site.id } }),
+    ]);
+  }
+
   for (const u of USERS) {
     await prisma.user.upsert({
       where: { email: u.email },
@@ -69,7 +76,7 @@ async function main() {
       update: { name: u.name, role: u.role },
     });
   }
-  console.log(`Seeded ${LOCALITIES.length} localities, ${LOCALITIES.length * 2} sites, ${USERS.length} demo accounts.`);
+  console.log(`Seeded ${LOCALITIES.length} localities, ${LOCALITIES.length} sites, ${USERS.length} demo accounts.`);
 }
 
 main().finally(() => prisma.$disconnect());

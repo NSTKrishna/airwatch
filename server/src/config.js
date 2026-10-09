@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -10,7 +11,8 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('12h'),
   MODEL_API_URL: z.string().url().default('http://127.0.0.1:8001'),
   MODEL_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-  SENSOR_PROVIDER: z.enum(['mock']).default('mock'),
+  SENSOR_PROVIDER: z.enum(['mock', 'replay']).default('mock'),
+  DATASET_CSV_PATH: z.string().default(fileURLToPath(new URL('../data/delhi_four_site_pm10_synthetic.csv', import.meta.url))),
   MONITOR_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(60),
   ACTIVE_ANOMALY_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
 });
@@ -30,6 +32,7 @@ export const config = Object.freeze({
   modelApiUrl: parsed.data.MODEL_API_URL.replace(/\/+$/, ''),
   modelTimeoutMs: parsed.data.MODEL_TIMEOUT_MS,
   sensorProvider: parsed.data.SENSOR_PROVIDER,
+  datasetCsvPath: parsed.data.DATASET_CSV_PATH,
   monitorIntervalSeconds: parsed.data.MONITOR_INTERVAL_SECONDS,
   activeAnomalyWindowSeconds: parsed.data.ACTIVE_ANOMALY_WINDOW_SECONDS,
 });

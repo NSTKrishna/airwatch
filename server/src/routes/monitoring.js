@@ -25,7 +25,7 @@ router.get('/system/status', async (_req, res) => {
       calibratedMargin: info.calibratedMargin ?? null,
       measurement: info.measurement ?? null,
     },
-    sensors: { provider: sensorProvider.name, dataSource: sensorProvider.dataSource, simulated: sensorProvider.dataSource === 'SIMULATED' },
+    sensors: { provider: sensorProvider.name, description: sensorProvider.description, dataSource: sensorProvider.dataSource, simulated: sensorProvider.dataSource === 'SIMULATED' },
     monitorIntervalSeconds: config.monitorIntervalSeconds,
     activeAnomalyWindowSeconds: config.activeAnomalyWindowSeconds,
   });

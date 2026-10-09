@@ -220,6 +220,7 @@ router.get('/simulator', async (_req, res) => {
   const sites = await prisma.site.findMany({ include: { locality: true, simulator: true }, orderBy: { code: 'asc' } });
   res.json({
     provider: sensorProvider.name,
+    providerDescription: sensorProvider.description,
     simulated: true,
     monitorIntervalSeconds: config.monitorIntervalSeconds,
     scenarios: Object.entries(SCENARIOS).map(([id, description]) => ({ id, description })),

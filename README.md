@@ -34,10 +34,26 @@ cd ..
 #    Expected SHA-256: c49aad720d9682400f532aa849409d6700ca8d8cfcb7b6df275b309f1daa363c
 shasum -a 256 adaptive-aqi-model/models/delhi_pm10_calibrated.joblib
 
-# 3. Databases and app
+# 3. Dataset (not in git). The sensor feed replays it:
+cp /path/to/delhi_four_site_pm10_synthetic.csv server/data/
+
+# 4. Databases and app
 createdb airwatch && createdb airwatch_test
 cp server/.env.example server/.env      # set DATABASE_URL and a random JWT_SECRET
 npm run setup
+
+# 5. With the model service running (see Run), load a week of history and sample complaints
+npm --prefix server run data:load
+```
+
+If the artifact is unavailable it can be rebuilt with the model repository's own pipeline, which is
+deterministic. Write the reports outside the repo so tracked files stay untouched, then confirm the
+result with `npm test` (`live-model.test.js` compares it with the published smoke test):
+
+```bash
+cd adaptive-aqi-model
+.venv/bin/python -m src.run_demo --data /path/to/delhi_four_site_pm10_synthetic.csv \
+  --serving-config /tmp/aqi-rebuild/config.yaml --reports /tmp/aqi-rebuild/reports
 ```
 
 ## Run
@@ -62,6 +78,7 @@ Public sign-up always creates a citizen. Municipal accounts come from the seed.
 
 To see the whole workflow: sign in as the officer, open **Sensor simulator**, set a site to
 "Injected construction dust episode", then sign in as the citizen and report that site.
+The dataset also contains its own incidents, so sites get flagged without any override.
 
 ## How model integration works
 
@@ -107,10 +124,13 @@ npm test
 
 ## Known limits
 
-- Sensor data is simulated (`server/src/services/mockSensorProvider.js`). A real provider implements
-  the same `getPairedReading(site)` shape.
-- The model was trained on synthetic data with one site per locality. The second site in each locality
-  uses a station distance inside the training range but a bearing the model has not seen.
+- Sensor data is simulated. `SENSOR_PROVIDER=replay` replays the synthetic dataset hour by hour, mapped
+  cyclically onto the current date and relabelled with the current time; `mock` generates readings with
+  no dataset. A real provider implements the same `getPairedReading(site)` shape.
+- History loaded by `data:load` is the dataset run through the real model: each past hour is sent with a
+  current timestamp (the model rejects old ones) and stored against the hour it represents.
+- The demo complaints created by `data:load` start with "Demo report:" and use placeholder images.
+- There is one monitored site per locality, matching the dataset.
 - Hindi copy is a first draft and needs review by a native speaker.
 - Uploaded images are stored in PostgreSQL (`Attachment.data`), which suits a pilot, not high volume.
 - The JWT is kept in `localStorage`; move to an httpOnly cookie before a public launch.

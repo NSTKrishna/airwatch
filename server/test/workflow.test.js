@@ -35,7 +35,7 @@ function complaintForm(fields, files = [{ name: 'dust.png', data: PNG, type: 'im
 
 before(async () => {
   model = await startModelDouble();
-  Object.assign(process.env, { NODE_ENV: 'test', DATABASE_URL: testDbUrl, MODEL_API_URL: model.url, MONITOR_INTERVAL_SECONDS: '0' });
+  Object.assign(process.env, { NODE_ENV: 'test', SENSOR_PROVIDER: 'mock', DATABASE_URL: testDbUrl, MODEL_API_URL: model.url, MONITOR_INTERVAL_SECONDS: '0' });
   const env = { ...process.env };
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], { cwd: serverDir, env, stdio: 'pipe' });
   ({ prisma } = await import('../src/db.js'));
@@ -84,9 +84,9 @@ test('no verdict is produced while the model is unavailable', async () => {
   const { resetModelInfoCache } = await import('../src/services/modelClient.js');
   resetModelInfoCache();
   const sweep = await api('POST', '/municipal/monitoring/run', { token: tokens.officer });
-  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: 8 });
+  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: 4 });
   const rows = await prisma.anomalyEvaluation.findMany();
-  assert.equal(rows.length, 8);
+  assert.equal(rows.length, 4);
   for (const row of rows) {
     assert.equal(row.isAnomaly, null);
     assert.equal(row.dynamicBarrier, null);
@@ -94,7 +94,7 @@ test('no verdict is produced while the model is unavailable', async () => {
   }
   const summary = await api('GET', '/municipal/summary', { token: tokens.officer });
   assert.equal(summary.body.activeAnomalies, 0);
-  assert.equal(summary.body.sitesWithoutAssessment, 8);
+  assert.equal(summary.body.sitesWithoutAssessment, 4);
   const status = await api('GET', '/system/status', { token: tokens.citizen });
   assert.equal(status.body.model.ready, false);
   assert.equal(status.body.sensors.simulated, true);

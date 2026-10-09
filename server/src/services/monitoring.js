@@ -4,17 +4,19 @@ import { prisma } from '../db.js';
 import { buildPredictRequest, toCanonicalUgm3 } from './modelAdapter.js';
 import { getModelInfo, predict } from './modelClient.js';
 import { mockSensorProvider } from './mockSensorProvider.js';
+import { replaySensorProvider } from './replaySensorProvider.js';
 
-const providers = { mock: mockSensorProvider };
+const providers = { mock: mockSensorProvider, replay: replaySensorProvider };
 export const sensorProvider = providers[config.sensorProvider];
 
 const siteInclude = { locality: true };
 
-async function storeObservation(site, pair) {
+async function storeObservation(site, pair, receivedAt) {
   const weather = pair.weather || {};
   return prisma.sensorObservation.create({
     data: {
       siteId: site.id,
+      receivedAt,
       dataSource: pair.data_source,
       pollutant: pair.pollutant,
       averaging: pair.averaging,
@@ -37,13 +39,20 @@ async function storeObservation(site, pair) {
   });
 }
 
-/** Read one site's sensors, run inference if (and only if) inputs are valid, and persist the outcome. */
-export async function evaluateSite(site) {
-  const pair = await sensorProvider.getPairedReading(site);
-  const observation = await storeObservation(site, pair);
+/**
+ * Read one site's sensors, run inference if (and only if) inputs are valid, and persist the outcome.
+ *
+ * `at` backfills a past hour from a replayable provider. The reading for that hour is sent to the
+ * real model relabelled with the current time (the model only accepts fresh timestamps, and its
+ * prediction does not depend on the clock), and the result is stored against the historical hour.
+ */
+export async function evaluateSite(site, { at } = {}) {
+  const when = at ?? new Date();
+  const pair = await sensorProvider.getPairedReading(site, when, { ignoreScenario: Boolean(at) });
+  const observation = await storeObservation(site, pair, at);
   const modelInfo = await getModelInfo();
 
-  const base = { observationId: observation.id, siteId: site.id };
+  const base = { observationId: observation.id, siteId: site.id, evaluatedAt: at };
   const modelIdentity = {
     modelVersion: modelInfo.version,
     modelAlgorithm: modelInfo.algorithm ?? null,
@@ -57,7 +66,7 @@ export async function evaluateSite(site) {
     });
   }
 
-  const built = buildPredictRequest({ pair, geometry: site, modelInfo });
+  const built = buildPredictRequest({ pair, geometry: site, modelInfo, now: when });
   if (!built.ok) {
     return prisma.anomalyEvaluation.create({ data: { ...base, status: 'INPUT_REJECTED', reason: built.reason } });
   }
@@ -79,6 +88,11 @@ export async function evaluateSite(site) {
     });
   }
 
+  if (at) {
+    const sentAt = new Date().toISOString();
+    built.request.background.timestamp = sentAt;
+    built.request.site.timestamp = sentAt;
+  }
   const outcome = await predict(built.request);
   if (outcome.kind !== 'ok') {
     const status = { unavailable: 'MODEL_UNAVAILABLE', rejected: 'INPUT_REJECTED', error: 'MODEL_ERROR' }[outcome.kind];
