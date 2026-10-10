@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { z } from 'zod';
 
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
+// Compose passes unset optional settings as empty strings; read those as "not set".
+const optional = (type) => z.preprocess((v) => (v === '' ? undefined : v), type.optional());
 
 const schema = z.object({
   NODE_ENV: z.string().default('development'),
@@ -41,7 +43,22 @@ const schema = z.object({
   // Simulated devices derive their credentials from this secret; only hashes are stored.
   SIMULATOR_TOKEN_SECRET: z.string().min(32).optional(),
   SIMULATOR_INGEST_URL: z.string().url().optional(),
+
+  // Where uploaded images are kept. "database" needs nothing else; "s3" keeps the bytes in a
+  // private bucket and only the object key in PostgreSQL. Credentials come from the standard
+  // AWS chain (environment, shared file or instance role), never from this file.
+  ATTACHMENT_STORAGE: z.enum(['database', 's3']).default('database'),
+  S3_BUCKET: optional(z.string().min(3)),
+  S3_REGION: optional(z.string().min(1)),
+  S3_KEY_PREFIX: z.string().regex(/^([\w.-]+\/)*$/, 'must be empty or end with "/"').default('attachments/'),
+  // Only for S3-compatible stores used in local testing (MinIO and the like).
+  S3_ENDPOINT: optional(z.string().url()),
+  S3_FORCE_PATH_STYLE: bool.default('false'),
 }).superRefine((v, ctx) => {
+  if (v.ATTACHMENT_STORAGE === 's3') {
+    if (!v.S3_BUCKET) ctx.addIssue({ code: 'custom', path: ['S3_BUCKET'], message: 'required when ATTACHMENT_STORAGE=s3' });
+    if (!v.S3_REGION && !process.env.AWS_REGION) ctx.addIssue({ code: 'custom', path: ['S3_REGION'], message: 'required when ATTACHMENT_STORAGE=s3 (or set AWS_REGION)' });
+  }
   if (v.SIMULATOR_ENABLED && !v.SIMULATOR_TOKEN_SECRET) {
     ctx.addIssue({ code: 'custom', path: ['SIMULATOR_TOKEN_SECRET'], message: 'required when SIMULATOR_ENABLED=true' });
   }
@@ -83,5 +100,13 @@ export const config = Object.freeze({
     seed: env.SIMULATOR_SEED,
     tokenSecret: env.SIMULATOR_TOKEN_SECRET ?? null,
     ingestUrl: env.SIMULATOR_INGEST_URL?.replace(/\/+$/, '') ?? null,
+  }),
+  storage: Object.freeze({
+    driver: env.ATTACHMENT_STORAGE,
+    bucket: env.S3_BUCKET ?? null,
+    region: env.S3_REGION ?? process.env.AWS_REGION ?? null,
+    keyPrefix: env.S3_KEY_PREFIX,
+    endpoint: env.S3_ENDPOINT ?? null,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
   }),
 });

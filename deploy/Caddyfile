@@ -1,7 +1,13 @@
-# Public entry point. Caddy obtains and renews the TLS certificate automatically.
+# Public entry point. Caddy obtains and renews the TLS certificate automatically
+# (Let's Encrypt, with ZeroSSL as its built-in fallback) and redirects HTTP to HTTPS.
 # Only /api is exposed; PostgreSQL and the model service are not reachable from outside.
 {$API_DOMAIN} {
 	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
 	request_body {
 		max_size 25MB
 	}

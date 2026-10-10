@@ -27,7 +27,7 @@ Rules that hold everywhere, in the API and on every screen:
   and says so. Neither replaces the other.
 - A follow-up a moderator set aside counts for nothing, and stays in the trail with the reason.
 
-![Public case page: AirWatch review Resolved, official complaint with an acknowledgment on record, residents' position Closure disputed, and a notice that both are on the record](images/case-three-positions.jpg)
+![Public case page: AirWatch review Resolved, no official complaint recorded, residents' position Dust still reported, and a notice that the closure and the resident's report are both on the record](images/case-three-positions.jpg)
 
 ## The loop a citizen follows
 
@@ -47,13 +47,13 @@ Rules that hold everywhere, in the API and on every screen:
 6. **Share.** WhatsApp, the phone's share sheet, or the link. The message carries all three
    positions.
 
-![The reporter's page: prepared complaint text with a copy button, official channels, and the button to record the reference](images/take-it-to-bmc.jpg)
+![The reporter's case page: the three positions side by side, what to do next, the official complaint as three numbered steps (send, save the reference, record the reply), and the evidence with its demo-image label](images/case-page-desktop.jpg)
 
 The case page also says what to do next. With nothing filed: file it. Filed with no response
 recorded for seven days: quote the reference on 1916, add a fresh photograph, write to the MPCB
 sub-regional office. Residents still reporting dust: get a second resident's photograph.
 
-![Evidence trail: the official complaint with its reference and a moderator's check, then a resident's observation with a photograph taken at the site](images/evidence-trail.jpg)
+![Evidence trail: the report, the official complaint with its reference and a moderator's check, the status change by the case desk, then a resident's observation added at the site and not yet checked](images/evidence-trail.jpg)
 
 ## What is protected
 
@@ -104,7 +104,7 @@ The legend doubles as the layer switches.
 
 ![Citizen map with project squares, sensor badges, report pins, ward boundary and the legend](images/map-markers-desktop.jpg)
 
-![The public case page on a phone](images/phone-report.jpg)
+![The reporter's case page on a phone: status and next step first, then the evidence, the on-site check, and the BMC steps and trail as sections that fold](images/case-page-phone.jpg)
 
 ## API
 

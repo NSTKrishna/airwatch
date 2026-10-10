@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ChevronRight, CircleCheck, EyeOff, MapPin, Radio } from 'lucide-react';
 import { apiUrl } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
 import { fmtRelative } from '../../lib/format.js';
-import { CasePositions, EvidenceTrail, FollowUpActions, NextStep, OfficialKit, ShareCase } from '../../components/CaseRecord.jsx';
+import { CasePositions, EvidenceTrail, NextStep, OfficialFlow, PhotoGrid, ShareCase, SiteCheck } from '../../components/CaseRecord.jsx';
 import { DemoTag, WardOffice } from '../../components/civic.jsx';
 import { SheetBody, SheetHeader, SheetSection } from '../../components/Sheet.jsx';
 import { LoadError, Notice, Skeleton, StatusPill } from '../../components/ui.jsx';
@@ -16,7 +16,6 @@ export default function ReportPanel() {
   const location = useLocation();
   // Polled so a change made on the case desk, or by another resident, shows up without a reload.
   const { data, error, loading, reload } = useApi(`/public/reports/${encodeURIComponent(reference)}`, { pollMs: 15_000 });
-  const [formKind, setFormKind] = useState(null);
   const r = data?.report;
   useEffect(() => { document.title = `${reference} · AirWatch`; }, [reference]);
 
@@ -26,10 +25,6 @@ export default function ReportPanel() {
   if (loading && !data) return <><SheetHeader title={reference} /><div className="space-y-3 p-4"><Skeleton className="h-24" /><Skeleton className="h-48" /></div></>;
 
   const closed = r.status === 'RESOLVED' || r.status === 'REJECTED';
-  const openForm = (kind) => {
-    setFormKind(kind);
-    requestAnimationFrame(() => document.getElementById('case-actions')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
   return (
     <>
       <SheetHeader title={r.project?.name || r.locationText || t('pub.unlisted')}
@@ -49,16 +44,12 @@ export default function ReportPanel() {
           <div className="mt-3"><NextStep report={r} /></div>
         </SheetSection>
 
-        <SheetSection title={formKind ? null : t('action.title')}>
-          <div id="case-actions" className="scroll-mt-3">
-            <FollowUpActions report={r} channels={data.dustAuthority.channels} formKind={formKind} setFormKind={setFormKind} onChanged={reload} />
+        <SheetSection title={t('site.title')}>
+          <SiteCheck report={r} channels={data.dustAuthority.channels} onChanged={reload} />
+          <div className="mt-4 border-t border-line pt-3">
+            <h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">{t('share.title')}</h3>
+            <ShareCase report={r} />
           </div>
-          {formKind ? null : (
-            <div className="mt-4 border-t border-line pt-3">
-              <h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">{t('share.title')}</h3>
-              <ShareCase report={r} />
-            </div>
-          )}
         </SheetSection>
 
         {r.status === 'REJECTED' ? null : (
@@ -68,8 +59,7 @@ export default function ReportPanel() {
                 <ChevronRight className="size-4 transition-transform duration-150 group-open:rotate-90" aria-hidden />{t('kit.title')}
               </summary>
               <div className="mt-3">
-                <OfficialKit report={r} wardOffice={r.wardOffice} authority={data.dustAuthority}
-                  onAddReference={() => openForm('OFFICIAL_COMPLAINT')} onAddResponse={() => openForm('OFFICIAL_RESPONSE')} />
+                <OfficialFlow report={r} wardOffice={r.wardOffice} authority={data.dustAuthority} onChanged={reload} />
               </div>
             </details>
           </SheetSection>
@@ -93,15 +83,8 @@ export default function ReportPanel() {
         <SheetSection title={t('pub.whatWasReported')}>
           {r.description ? <p className="max-w-[65ch] text-[0.9375rem] whitespace-pre-line">{r.description}</p>
             : <p className="flex items-start gap-2 text-[0.875rem] text-ink-2"><EyeOff className="mt-0.5 size-4 shrink-0" aria-hidden />{t('pub.withheld', { count: r.photoCount })}</p>}
-          {r.photos.length ? (
-            <ul className="mt-3 grid grid-cols-3 gap-2" aria-label={t('pub.photos')}>
-              {r.photos.map((photo, i) => (
-                <li key={photo.id} className="overflow-hidden rounded-lg border border-line">
-                  <a href={apiUrl(photo.url)} target="_blank" rel="noreferrer"><img src={apiUrl(photo.url)} alt={t('pub.photoAlt', { n: i + 1 })} loading="lazy" className="aspect-square w-full object-cover" /></a>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <PhotoGrid className="mt-3" lead demo={r.isDemo} label={t('pub.photos')}
+            photos={r.photos.map((photo, i) => ({ id: photo.id, src: apiUrl(photo.url), alt: t('pub.photoAlt', { n: i + 1 }) }))} />
           <p className="mt-3 flex items-start gap-1.5 text-[0.8125rem] text-ink-2">
             <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             {r.project ? <Link to={`/project/${r.project.code}`} className="font-medium text-accent underline">{r.project.name}</Link> : t('pub.approximate')}

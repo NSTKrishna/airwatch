@@ -9,6 +9,7 @@
 import { prisma } from '../db.js';
 import { DUST_AUTHORITY } from '../data/pilot.js';
 import { HttpError, badRequest, conflict, notFound } from '../lib/errors.js';
+import { withStoredAttachments } from '../lib/storage.js';
 import { distanceM } from './wards.js';
 
 export const FOLLOW_UP_KINDS = ['OFFICIAL_COMPLAINT', 'OFFICIAL_RESPONSE', 'STILL_UNRESOLVED', 'IMPROVEMENT_OBSERVED', 'DISPUTE_CLOSURE', 'NOTE'];
@@ -63,7 +64,7 @@ export async function addFollowUp(complaint, author, input, { photoRows = [], ac
   const recent = await prisma.followUp.count({ where: { complaintId: complaint.id, authorId: author.id, createdAt: { gte: new Date(Date.now() - DAY_MS) } } });
   if (recent >= MAX_PER_AUTHOR_PER_DAY) throw new HttpError(429, 'You have added many follow-ups to this case today. Please try again tomorrow.');
 
-  return prisma.$transaction(async (tx) => {
+  return withStoredAttachments([...photoRows, ...acknowledgmentRows], (stored) => prisma.$transaction(async (tx) => {
     const followUp = await tx.followUp.create({
       data: {
         complaintId: complaint.id, authorId: author.id, kind: input.kind,
@@ -73,7 +74,7 @@ export async function addFollowUp(complaint, author, input, { photoRows = [], ac
         officialReference: input.kind === 'OFFICIAL_COMPLAINT' ? input.officialReference.trim() : null,
       },
     });
-    const rows = [...photoRows, ...acknowledgmentRows].map((row) => ({ ...row, complaintId: complaint.id, uploadedById: author.id, followUpId: followUp.id }));
+    const rows = stored.map((row) => ({ ...row, complaintId: complaint.id, uploadedById: author.id, followUpId: followUp.id }));
     if (rows.length) await tx.attachment.createMany({ data: rows });
     await tx.complaintEvent.create({
       data: {
@@ -82,7 +83,7 @@ export async function addFollowUp(complaint, author, input, { photoRows = [], ac
       },
     });
     return followUp;
-  });
+  }));
 }
 
 /**

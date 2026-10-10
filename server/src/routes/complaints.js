@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { readAttachment, withStoredAttachments } from '../lib/storage.js';
 import { imageUpload, toAttachmentRows } from '../lib/uploads.js';
 import { requireRole } from '../middleware/auth.js';
 import { parse } from '../middleware/validate.js';
@@ -46,7 +47,8 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
 
   // Evidence is attached when it exists; its absence never blocks a report.
   const evidence = await captureSiteEvidence(site?.id);
-  const complaint = await prisma.$transaction(async (tx) => {
+  const photoRows = toAttachmentRows(req.files, { uploadedById: req.user.id, kind: 'CITIZEN_PHOTO' });
+  const complaint = await withStoredAttachments(photoRows, (photos) => prisma.$transaction(async (tx) => {
     const created = await tx.complaint.create({
       data: {
         citizenId: req.user.id,
@@ -62,9 +64,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
         sensorSnapshot: evidence.sensorSnapshot ?? undefined,
       },
     });
-    await tx.attachment.createMany({
-      data: toAttachmentRows(req.files, { complaintId: created.id, uploadedById: req.user.id, kind: 'CITIZEN_PHOTO' }),
-    });
+    await tx.attachment.createMany({ data: photos.map((photo) => ({ ...photo, complaintId: created.id })) });
     await tx.complaintEvent.create({
       data: {
         complaintId: created.id, actorId: req.user.id, type: 'SUBMITTED', toStatus: 'SUBMITTED',
@@ -72,7 +72,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
       },
     });
     return created;
-  });
+  }));
 
   const full = await prisma.complaint.findUnique({ where: { id: complaint.id }, include: complaintDetailInclude });
   res.status(201).json({ complaint: complaintCitizenView(full, { detail: true }) });
@@ -162,7 +162,7 @@ attachmentsRouter.get('/:id', async (req, res) => {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'private, max-age=3600',
   });
-  res.end(Buffer.from(attachment.data));
+  res.end(await readAttachment(attachment));
 });
 
 export default router;

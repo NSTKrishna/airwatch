@@ -41,7 +41,9 @@ barrier is flagged as an **unexpected PM10 excess** for review.
 | `server/` | Express API, Prisma schema, device ingestion, simulator, pairing, tests |
 | `server/src/data/` | Reference data: pilot wards, verified projects, representatives, ward boundaries |
 | `client/` | React + Vite + Tailwind app: public map, citizen reporting, municipal case desk |
-| `deploy/`, `docker-compose.prod.yml`, `amplify.yml` | AWS deployment files (see `docs/DEPLOY_AWS.md`) |
+| `docker-compose.prod.yml`, `deploy/` | Production stack, host scripts, smoke test, AWS scripts (see [docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md)) |
+| `infra/` | AWS CDK stack: Lightsail host, S3 bucket, CloudWatch alarms, budget, Amplify app |
+| `.github/workflows/ci.yml` | API tests, client build, template tests, script checks, and a smoke test of the production stack |
 
 ## How data flows
 
@@ -244,6 +246,25 @@ simulator** and set that project to "Construction dust event". As the citizen, r
 project, then work the complaint from the municipal inbox and watch its public page
 (`/report/AW-...`) follow each step.
 
+## Deployment
+
+The stack deploys to AWS for about 13.50 USD a month: the client on Amplify Hosting, everything
+else on one Lightsail instance under Docker Compose, photographs in a private S3 bucket, logs and
+two alarms in CloudWatch, and a budget alert. One CDK stack creates it and three scripts deploy it.
+
+![AirWatch on AWS: Amplify Hosting serves the React client, one Lightsail instance runs Caddy, Express, PostgreSQL, the FastAPI model and the simulator worker, S3 holds photographs, CloudWatch holds logs and alarms](docs/images/aws-architecture.svg)
+
+- [docs/ARCHITECTURE_AWS.md](docs/ARCHITECTURE_AWS.md): the design, the cost table, the
+  alternatives and where AWS adds value.
+- [docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md): the procedure, secrets, rollback, backups, alerts.
+
+Nothing has been deployed to an AWS account yet. The same images and Compose file run locally:
+
+```bash
+deploy/scripts/local-stack.sh up      # TLS at Caddy, an S3 stand-in, the built client on its own origin
+deploy/scripts/local-stack.sh smoke   # 33 checks: readiness, model assessments, the whole citizen workflow
+```
+
 ## Tests
 
 ```bash
@@ -258,6 +279,7 @@ npm test
 | `workflow.test.js` | Simulator scenarios, complaint creation with evidence, citizen/municipal permissions, lifecycle and audit trail |
 | `public.test.js` | Public map API, reference-data integrity (sources, projects inside their ward), ward routing, the citizen to case desk to public status loop, what stays private, moderation |
 | `accountability.test.js` | The independent loop end to end (report, official reference, moderator check, residents' follow-up), a resolved case the citizen disputes, metadata stripping, photo caching after moderation, ward and area consistency |
+| `storage.test.js` | Photographs in object storage (`ATTACHMENT_STORAGE=s3`) against an in-process S3 stand-in: the row keeps only the key, the public rules still apply, nothing is left behind when a write fails |
 | `live-model.test.js` | The real FastAPI model against its published smoke test. Skipped if the artifact is not loaded |
 
 The HTTP tests use a labelled **test double** of the model (`test/helpers/modelDouble.js`). It is not
@@ -293,4 +315,9 @@ the public status history shown on the map.
 - Demo history is evaluated with relabelled timestamps (see `server/scripts/load-demo-data.js`).
 - Citizen screens are in English, Hindi and Marathi. The Hindi and Marathi are first drafts that a
   native speaker has not reviewed. Facts quoted from sources stay in the source's language.
-- Images are stored in PostgreSQL; the session token is kept in `localStorage`.
+- Images are stored in PostgreSQL by default and in a private S3 bucket when `ATTACHMENT_STORAGE=s3`.
+  Either way the API serves them. The session token is kept in `localStorage`.
+- Photographs on demo cases are synthetic scenes rendered by `server/scripts/demo-images/render.py`.
+  They are labelled as demo images in the picture itself and beside it.
+- The trained model artifact is not in git. `deploy/model/build_local_artifact.py` builds a labelled
+  stand-in with the model repository's own pipeline; it is not the team's artifact.

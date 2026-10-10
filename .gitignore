@@ -4,5 +4,9 @@ dist/
 .env.*
 !.env.example
 !.env.production.example
+!.env.local.example
 .DS_Store
 .impeccable/
+cdk.out/
+cdk.context.json
+*.pem

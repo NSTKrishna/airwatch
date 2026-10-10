@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 800" width="1300" height="800" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#16201e"/>
+    </marker>
+    <marker id="arrow-soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f6a67"/>
+    </marker>
+  </defs>
+  <rect width="1300" height="800" fill="#ffffff"/>
+
+  <text x="40" y="46" font-size="26" font-weight="700" fill="#16201e">AirWatch on AWS: one small host, four managed services</text>
+  <text x="40" y="76" font-size="18" fill="#44504d">Everything inside the dashed line is created by one AWS CDK stack (infra/). Estimated cost: about 13 USD a month.</text>
+
+  <!-- account boundary -->
+  <rect x="300" y="100" width="970" height="656" rx="14" fill="#fbfaf7" stroke="#8a938f" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="322" y="130" font-size="18" font-weight="700" fill="#44504d">AWS account, Region ap-south-1 (Mumbai)</text>
+
+  <!-- people -->
+  <rect x="40" y="150" width="200" height="96" rx="10" fill="#ffffff" stroke="#16201e" stroke-width="2"/>
+  <text x="140" y="190" font-size="20" font-weight="700" text-anchor="middle" fill="#16201e">Citizen or officer</text>
+  <text x="140" y="218" font-size="18" text-anchor="middle" fill="#44504d">phone or desktop</text>
+
+  <rect x="40" y="620" width="200" height="118" rx="10" fill="#ffffff" stroke="#16201e" stroke-width="2"/>
+  <text x="140" y="658" font-size="20" font-weight="700" text-anchor="middle" fill="#16201e">Operator</text>
+  <text x="140" y="686" font-size="18" text-anchor="middle" fill="#44504d">deploy scripts,</text>
+  <text x="140" y="710" font-size="18" text-anchor="middle" fill="#44504d">alert emails</text>
+
+  <!-- Amplify -->
+  <rect x="340" y="150" width="330" height="96" rx="10" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="505" y="188" font-size="20" font-weight="700" text-anchor="middle" fill="#084742">AWS Amplify Hosting</text>
+  <text x="505" y="216" font-size="18" text-anchor="middle" fill="#16201e">React client, HTTPS and CDN</text>
+
+  <!-- Lightsail -->
+  <rect x="340" y="300" width="560" height="440" rx="12" fill="#ffffff" stroke="#16201e" stroke-width="2.5"/>
+  <text x="362" y="334" font-size="20" font-weight="700" fill="#16201e">Amazon Lightsail instance</text>
+  <text x="362" y="360" font-size="18" fill="#44504d">2 GB, static IP, Docker Compose, daily snapshot</text>
+
+  <rect x="362" y="384" width="516" height="62" rx="8" fill="#eceae3" stroke="#44504d" stroke-width="1.5"/>
+  <text x="620" y="422" font-size="19" text-anchor="middle" fill="#16201e"><tspan font-weight="700">Caddy</tspan>  ports 80 and 443, automatic TLS certificate</text>
+
+  <rect x="362" y="478" width="516" height="62" rx="8" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="620" y="516" font-size="19" text-anchor="middle" fill="#16201e"><tspan font-weight="700">Express API</tspan>  auth, cases, ingestion, visibility rules</text>
+
+  <!-- private network -->
+  <rect x="352" y="566" width="536" height="162" rx="8" fill="#faf7ef" stroke="#7a5200" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <text x="620" y="718" font-size="16" text-anchor="middle" fill="#7a5200">private network: no published port, no route to the internet</text>
+  <rect x="366" y="584" width="160" height="104" rx="8" fill="#ffffff" stroke="#44504d" stroke-width="1.5"/>
+  <text x="446" y="622" font-size="19" font-weight="700" text-anchor="middle" fill="#16201e">PostgreSQL</text>
+  <text x="446" y="648" font-size="17" text-anchor="middle" fill="#44504d">Docker volume</text>
+  <text x="446" y="671" font-size="17" text-anchor="middle" fill="#44504d">nightly dump</text>
+  <rect x="540" y="584" width="164" height="104" rx="8" fill="#ffffff" stroke="#44504d" stroke-width="1.5"/>
+  <text x="622" y="622" font-size="19" font-weight="700" text-anchor="middle" fill="#16201e">FastAPI model</text>
+  <text x="622" y="648" font-size="17" text-anchor="middle" fill="#44504d">Random Forest</text>
+  <text x="622" y="671" font-size="17" text-anchor="middle" fill="#44504d">PM10 barrier</text>
+  <rect x="718" y="584" width="160" height="104" rx="8" fill="#faf0d7" stroke="#7a5200" stroke-width="1.5"/>
+  <text x="798" y="622" font-size="19" font-weight="700" text-anchor="middle" fill="#16201e">Worker</text>
+  <text x="798" y="648" font-size="17" text-anchor="middle" fill="#7a5200">SIMULATED</text>
+  <text x="798" y="671" font-size="17" text-anchor="middle" fill="#7a5200">devices</text>
+
+  <!-- inner arrows -->
+  <line x1="620" y1="446" x2="620" y2="474" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="446" y1="540" x2="446" y2="580" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <line x1="622" y1="540" x2="622" y2="580" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <line x1="798" y1="584" x2="798" y2="544" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="808" y="560" font-size="15" fill="#16201e">readings</text>
+
+  <!-- S3 -->
+  <rect x="960" y="300" width="286" height="118" rx="10" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="1103" y="338" font-size="20" font-weight="700" text-anchor="middle" fill="#084742">Amazon S3</text>
+  <text x="1103" y="366" font-size="18" text-anchor="middle" fill="#16201e">private bucket: photographs,</text>
+  <text x="1103" y="390" font-size="18" text-anchor="middle" fill="#16201e">database dumps (30 days)</text>
+
+  <!-- CloudWatch -->
+  <rect x="960" y="468" width="286" height="142" rx="10" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="1103" y="506" font-size="20" font-weight="700" text-anchor="middle" fill="#084742">Amazon CloudWatch</text>
+  <text x="1103" y="534" font-size="18" text-anchor="middle" fill="#16201e">container logs, 14 days</text>
+  <text x="1103" y="558" font-size="18" text-anchor="middle" fill="#16201e">error alarm, heartbeat alarm</text>
+  <text x="1103" y="586" font-size="18" text-anchor="middle" fill="#16201e">SNS email</text>
+
+  <!-- Budgets -->
+  <rect x="960" y="652" width="286" height="88" rx="10" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="1103" y="690" font-size="20" font-weight="700" text-anchor="middle" fill="#084742">AWS Budgets</text>
+  <text x="1103" y="718" font-size="18" text-anchor="middle" fill="#16201e">email at 50, 80 and 100 %</text>
+
+  <!-- outer arrows -->
+  <line x1="240" y1="186" x2="336" y2="186" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="268" y="176" font-size="15" text-anchor="middle" fill="#16201e">app</text>
+
+  <path d="M140 246 L140 415 L358 415" fill="none" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="152" y="288" font-size="16" fill="#16201e">HTTPS /api</text>
+  <text x="152" y="310" font-size="16" fill="#44504d">only the Amplify</text>
+  <text x="152" y="330" font-size="16" fill="#44504d">origin is allowed</text>
+
+  <path d="M878 498 L920 498 L920 359 L956 359" fill="none" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="928" y="452" font-size="15" fill="#16201e">objects</text>
+
+  <path d="M900 539 L956 539" fill="none" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="928" y="530" font-size="15" text-anchor="middle" fill="#16201e">logs</text>
+
+  <path d="M240 660 L336 660" fill="none" stroke="#5f6a67" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-soft)"/>
+  <text x="268" y="650" font-size="15" text-anchor="middle" fill="#44504d">SSH</text>
+
+  <path d="M1103 740 L1103 786 L140 786 L140 742" fill="none" stroke="#5f6a67" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-soft)"/>
+  <path d="M1246 539 L1262 539 L1262 786 L1103 786" fill="none" stroke="#5f6a67" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="620" y="778" font-size="15" text-anchor="middle" fill="#44504d">alarm and budget emails</text>
+</svg>

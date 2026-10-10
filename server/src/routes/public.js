@@ -11,6 +11,7 @@ import { CITY } from '../data/mumbai.js';
 import { DUST_AUTHORITY } from '../data/pilot.js';
 import { prisma } from '../db.js';
 import { notFound } from '../lib/errors.js';
+import { readAttachment } from '../lib/storage.js';
 import { parse } from '../middleware/validate.js';
 import { outcomeCounts } from '../services/followUps.js';
 import { systemStatus } from '../services/status.js';
@@ -238,7 +239,7 @@ router.get('/attachments/:id', async (req, res) => {
   res.set({ 'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff' });
   if (req.get('if-none-match') === etag) return res.status(304).end();
   res.set({ 'Content-Type': attachment.mimeType, 'Content-Length': String(attachment.sizeBytes), 'Content-Disposition': 'inline' });
-  return res.end(Buffer.from(attachment.data));
+  return res.end(await readAttachment(attachment));
 });
 
 export default router;

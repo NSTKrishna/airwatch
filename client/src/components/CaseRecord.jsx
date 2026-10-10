@@ -1,11 +1,11 @@
-// The independent side of a case, shared by the public report page and the reporter's own page:
-// where the case stands on three separate counts, what to do next, the tools to take it to
-// BMC, the ways to add follow-up, and the evidence trail.
-import { useEffect, useMemo, useRef, useState } from 'react';
+// The independent side of a case, shared by the public report panel and the reporter's own page:
+// where the case stands on three separate counts, what to do next, the steps that take it to
+// BMC, the on-site check, and the evidence trail.
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  ArrowRight, BadgeCheck, Building2, Check, CircleCheck, CircleDashed, CircleX, ClipboardCheck, Copy, ExternalLink, EyeOff, FileCheck, ImagePlus,
-  Landmark, LocateFixed, MessageCircle, MessageSquarePlus, Phone, Scale, Share2, ThumbsUp, TriangleAlert, Users, X,
+  ArrowRight, BadgeCheck, Building2, Check, ChevronDown, CircleCheck, CircleDashed, CircleX, ClipboardCheck, Copy, ExternalLink, EyeOff, FileCheck,
+  ImagePlus, Landmark, LocateFixed, MessageCircle, MessageSquarePlus, Phone, Scale, Share2, ThumbsUp, TriangleAlert, Users, X,
 } from 'lucide-react';
 import { api, apiUrl } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -35,12 +35,15 @@ const CITIZEN_STYLE = {
 };
 const AIRWATCH_ICON = { SUBMITTED: CircleDashed, UNDER_REVIEW: ClipboardCheck, INSPECTION_ASSIGNED: ClipboardCheck, RESOLVED: CircleCheck, REJECTED: CircleX };
 
-function Position({ icon: Icon, label, value, valueClass, children }) {
+// Whose position it is, in the colours the evidence trail uses for the same three voices.
+const SWATCH = { AIRWATCH: 'bg-ink-3', OFFICIAL: 'bg-accent', CITIZEN: 'bg-report' };
+
+function Position({ track, icon: Icon, label, value, valueClass, columns, children }) {
   return (
-    <div className="grid grid-cols-[1.25rem_1fr] gap-x-2.5 py-3 first:pt-0 last:pb-0">
+    <div className={`grid grid-cols-[1.25rem_1fr] gap-x-2.5 py-3 first:pt-0 last:pb-0 ${columns ? 'lg:px-5 lg:py-0 lg:first:pl-0 lg:last:pr-0' : ''}`}>
       <Icon className={`mt-0.5 size-5 ${valueClass}`} aria-hidden />
       <div className="min-w-0">
-        <dt className="text-[0.8125rem] text-ink-2">{label}</dt>
+        <dt className="flex items-center gap-1.5 text-[0.8125rem] text-ink-2"><span className={`size-2 shrink-0 rounded-[2px] ${SWATCH[track]}`} aria-hidden />{label}</dt>
         <dd className={`font-semibold ${valueClass}`}>{value}</dd>
         <dd className="mt-0.5 text-[0.8125rem] text-ink-2">{children}</dd>
       </div>
@@ -48,8 +51,11 @@ function Position({ icon: Icon, label, value, valueClass, children }) {
   );
 }
 
-/** AirWatch review, official complaint and residents' observations: three rows that never merge. */
-export function CasePositions({ report }) {
+/**
+ * AirWatch review, official complaint and residents' observations: three positions that never
+ * merge. `columns` sets them side by side on a wide screen; they are always rows on a phone.
+ */
+export function CasePositions({ report, columns = false }) {
   const { t, locale } = useI18n();
   const { official, citizen } = report.positions;
   const o = OFFICIAL_STYLE[official.state];
@@ -57,15 +63,15 @@ export function CasePositions({ report }) {
   const filed = official.firstFiledOn ? fmtDate(official.firstFiledOn, locale) : '';
   return (
     <>
-      <dl className="divide-y divide-line">
-        <Position icon={AIRWATCH_ICON[report.status]} label={t('case.airwatch.label')} value={t(`status.${report.status}`)} valueClass="text-ink">
+      <dl className={`divide-y divide-line ${columns ? 'lg:grid lg:grid-cols-3 lg:divide-x lg:divide-y-0' : ''}`}>
+        <Position track="AIRWATCH" columns={columns} icon={AIRWATCH_ICON[report.status]} label={t('case.airwatch.label')} value={t(`status.${report.status}`)} valueClass="text-ink">
           {t('case.airwatch.help')}
         </Position>
-        <Position icon={o.icon} label={t('case.official.label')} value={t(`case.official.${official.state}`)} valueClass={o.cls}>
+        <Position track="OFFICIAL" columns={columns} icon={o.icon} label={t('case.official.label')} value={t(`case.official.${official.state}`)} valueClass={o.cls}>
           {t(`case.official.help.${official.state}`, { date: filed })}
           {official.daysWithoutResponse >= 1 ? ` ${t('case.official.waiting', { days: official.daysWithoutResponse })}` : ''}
         </Position>
-        <Position icon={c.icon} label={t('case.citizen.label')} value={t(`case.citizen.${citizen.state}`)} valueClass={c.cls}>
+        <Position track="CITIZEN" columns={columns} icon={c.icon} label={t('case.citizen.label')} value={t(`case.citizen.${citizen.state}`)} valueClass={c.cls}>
           {citizen.state === 'NONE' ? t('case.citizen.help.NONE') : (
             <>
               {t(citizen.verified ? 'case.citizen.help.checked' : 'case.citizen.help.unchecked')}{' '}
@@ -93,11 +99,28 @@ export function nextStepKey({ status, positions }) {
   return official.state === 'ACTION_DOCUMENTED' ? 'next.afterAction' : 'next.waiting';
 }
 
-export function NextStep({ report }) {
+// The part of the page each next step is about: the BMC steps, the on-site check, or sharing.
+const NEXT_TARGET = {
+  'next.file': 'official', 'next.waiting': 'site', 'next.waitingLong': 'official', 'next.afterAction': 'site',
+  'next.persists': 'share', 'next.improvedUnchecked': 'site', 'next.improved': 'site',
+};
+
+/** `onGo(target)` turns the advice into a button that takes the reader to that part of the page. */
+export function NextStep({ report, onGo }) {
   const { t } = useI18n();
   const key = nextStepKey(report);
   if (!key) return null;
-  return <Notice tone="info" icon={ArrowRight} title={t('next.title')}>{t(key, { days: report.positions.official.daysWithoutResponse ?? 0 })}</Notice>;
+  const target = NEXT_TARGET[key];
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-lg border border-line bg-mute-soft px-3.5 py-3">
+      <ArrowRight className="size-4.5 shrink-0 self-start text-accent-strong sm:mt-0.5" aria-hidden />
+      <p className="min-w-0 flex-1 basis-64 text-[0.875rem]">
+        <span className="font-semibold">{t('next.title')}</span>{' '}
+        <span className="text-ink-2">{t(key, { days: report.positions.official.daysWithoutResponse ?? 0 })}</span>
+      </p>
+      {onGo ? <Button size="sm" className="max-sm:w-full" onClick={() => onGo(target)}>{t(`next.go.${target}`)}</Button> : null}
+    </div>
+  );
 }
 
 // --- Share ---
@@ -171,11 +194,10 @@ function FileList({ id, files, setFiles, max, label, hint, error }) {
   );
 }
 
-function FollowUpForm({ report, kind: initialKind, channels, onDone, onCancel }) {
+/** The form for one kind of follow-up. What is asked depends on the kind, never on a chooser. */
+function FollowUpForm({ report, kind, channels, onDone, onCancel }) {
   const { t } = useI18n();
-  const closed = CLOSED.has(report.status);
-  const kinds = ['STILL_UNRESOLVED', 'IMPROVEMENT_OBSERVED', ...(closed ? ['DISPUTE_CLOSURE'] : []), 'NOTE', 'OFFICIAL_COMPLAINT', 'OFFICIAL_RESPONSE'];
-  const [kind, setKind] = useState(initialKind);
+  const uid = useId();
   const [note, setNote] = useState('');
   const [photos, setPhotos] = useState([]);
   const [proof, setProof] = useState([]);
@@ -186,8 +208,8 @@ function FollowUpForm({ report, kind: initialKind, channels, onDone, onCancel })
   const [geo, setGeo] = useState('idle'); // idle | locating | denied
   const [state, setState] = useState({ busy: false, error: null, fields: {} });
   const official = OFFICIAL_KINDS.has(kind);
-  const heading = useRef(null);
-  useEffect(() => { heading.current?.focus(); }, []);
+  const form = useRef(null);
+  useEffect(() => { form.current?.querySelector('input:not([type=file]), textarea, select')?.focus({ preventScroll: true }); }, []);
 
   const locate = () => {
     if (!navigator.geolocation) { setGeo('denied'); return; }
@@ -222,49 +244,48 @@ function FollowUpForm({ report, kind: initialKind, channels, onDone, onCancel })
   };
 
   return (
-    <form noValidate onSubmit={submit} className="space-y-4 rounded-lg border border-line-strong bg-paper/60 p-3.5">
-      <h3 ref={heading} tabIndex={-1} className="font-semibold outline-none">{t('action.title')}</h3>
+    <form ref={form} noValidate onSubmit={submit} aria-label={t(`action.${kind}`)} className="space-y-4 rounded-lg border border-line-strong bg-paper/60 p-3.5">
       {state.error ? <Notice tone="flag" title={state.error} /> : null}
-
-      <FormField label={t('form.kind')} htmlFor="fu-kind" error={state.fields.kind}>
-        <select id="fu-kind" className="field" value={kind} onChange={(e) => setKind(e.target.value)}>
-          {kinds.map((k) => <option key={k} value={k}>{t(`action.${k}`)}</option>)}
-        </select>
-      </FormField>
+      {state.fields.kind ? <Notice tone="flag" title={state.fields.kind} /> : null}
 
       {kind === 'OFFICIAL_COMPLAINT' ? (
-        <>
-          <FormField label={t('form.channel')} htmlFor="fu-channel" error={state.fields.officialChannel}>
-            <select id="fu-channel" className="field" value={channel} onChange={(e) => setChannel(e.target.value)}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <FormField label={t('form.reference')} htmlFor={`${uid}-reference`} hint={t('form.referenceHint')} error={state.fields.officialReference}>
+              <input id={`${uid}-reference`} type="text" maxLength={60} autoComplete="off" className="field num" value={reference} onChange={(e) => setReference(e.target.value)} />
+            </FormField>
+          </div>
+          <FormField label={t('form.channel')} htmlFor={`${uid}-channel`} error={state.fields.officialChannel}>
+            <select id={`${uid}-channel`} className="field" value={channel} onChange={(e) => setChannel(e.target.value)}>
               <option value="">{t('form.channelChoose')}</option>
               {channels.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
               <option value="other">{t('form.channel.other')}</option>
             </select>
           </FormField>
-          <FormField label={t('form.reference')} htmlFor="fu-reference" hint={t('form.referenceHint')} error={state.fields.officialReference}>
-            <input id="fu-reference" type="text" maxLength={60} autoComplete="off" className="field num" value={reference} onChange={(e) => setReference(e.target.value)} />
+          <FormField label={t('form.filedOn')} htmlFor={`${uid}-date`} error={state.fields.occurredOn}>
+            <input id={`${uid}-date`} type="date" max={todayLocal()} className="field num" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
           </FormField>
-        </>
+        </div>
       ) : null}
 
-      {official ? (
-        <FormField label={t(kind === 'OFFICIAL_COMPLAINT' ? 'form.filedOn' : 'form.responseOn')} htmlFor="fu-date" error={state.fields.occurredOn}>
-          <input id="fu-date" type="date" max={todayLocal()} className="field num" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
+      {kind === 'OFFICIAL_RESPONSE' ? (
+        <FormField label={t('form.responseOn')} htmlFor={`${uid}-date`} error={state.fields.occurredOn}>
+          <input id={`${uid}-date`} type="date" max={todayLocal()} className="field num sm:max-w-56" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
         </FormField>
       ) : null}
 
       {kind === 'OFFICIAL_COMPLAINT' ? null : (
-        <FormField label={t(`form.note.${kind}`)} htmlFor="fu-note" error={state.fields.note}>
-          <textarea id="fu-note" rows={3} maxLength={2000} className="field resize-y" value={note} onChange={(e) => setNote(e.target.value)} />
+        <FormField label={t(`form.note.${kind}`)} htmlFor={`${uid}-note`} error={state.fields.note}>
+          <textarea id={`${uid}-note`} rows={3} maxLength={2000} className="field resize-y" value={note} onChange={(e) => setNote(e.target.value)} />
         </FormField>
       )}
 
       {official ? (
-        <FileList id="fu-document" files={proof} setFiles={setProof} max={1} error={state.fields.acknowledgment}
+        <FileList id={`${uid}-document`} files={proof} setFiles={setProof} max={1} error={state.fields.acknowledgment}
           label={t(kind === 'OFFICIAL_COMPLAINT' ? 'form.acknowledgment' : 'form.responseFile')} hint={t('form.acknowledgmentHint')} />
       ) : (
         <>
-          <FileList id="fu-photos" files={photos} setFiles={setPhotos} max={MAX_PHOTOS} label={t('form.photos')} hint={t('form.photosHint')} error={state.fields.photos} />
+          <FileList id={`${uid}-photos`} files={photos} setFiles={setPhotos} max={MAX_PHOTOS} label={t('form.photos')} hint={t('form.photosHint')} error={state.fields.photos} />
           {coords ? (
             <p className="flex items-start gap-2 text-[0.8125rem] text-ok"><CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />{t('form.locationSet')}</p>
           ) : (
@@ -278,67 +299,136 @@ function FollowUpForm({ report, kind: initialKind, channels, onDone, onCancel })
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" loading={state.busy}>{t('form.submit')}</Button>
-        <Button variant="ghost" onClick={onCancel}>{t('form.cancel')}</Button>
+        {onCancel ? <Button variant="ghost" onClick={onCancel}>{t('form.cancel')}</Button> : null}
       </div>
     </form>
   );
 }
 
-const ACTIONS = [
-  { kind: 'STILL_UNRESOLVED', icon: TriangleAlert },
-  { kind: 'IMPROVEMENT_OBSERVED', icon: ThumbsUp },
-  { kind: 'NOTE', icon: MessageSquarePlus },
-  { kind: 'DISPUTE_CLOSURE', icon: Scale, closedOnly: true },
+const SignInToAdd = () => {
+  const { t } = useI18n();
+  const location = useLocation();
+  return <Link to="/login" state={{ from: location.pathname }} className={buttonClass({ variant: 'secondary', size: 'sm' })}>{t('action.signIn')}</Link>;
+};
+
+// --- The on-site check ---
+
+const SITE_ACTIONS = [
+  { kind: 'STILL_UNRESOLVED', icon: TriangleAlert, on: 'border-report bg-[#fdf0e8] text-report' },
+  { kind: 'IMPROVEMENT_OBSERVED', icon: ThumbsUp, on: 'border-ok bg-ok-soft text-ok' },
+  { kind: 'DISPUTE_CLOSURE', icon: Scale, on: 'border-report bg-[#fdf0e8] text-report', closedOnly: true },
+  { kind: 'NOTE', icon: MessageSquarePlus, on: 'border-accent bg-accent-soft text-accent-strong' },
 ];
 
 /**
- * The follow-up actions and, once one is chosen, its form. Any signed-in citizen may add to
- * a case; the case desk checks follow-ups from its own screens instead.
- * `formKind` / `setFormKind` are lifted so the official-complaint kit can open the same form.
+ * What residents record about the site itself: the answer to "did anything change?", which no
+ * status set by AirWatch or BMC can give. Any signed-in citizen may add to a case; the case
+ * desk checks follow-ups from its own screens instead.
  */
-export function FollowUpActions({ report, channels, formKind, setFormKind, onChanged }) {
+export function SiteCheck({ report, channels, onChanged }) {
   const { t } = useI18n();
   const { user } = useAuth();
-  const location = useLocation();
+  const [kind, setKind] = useState(null);
   const [added, setAdded] = useState(false);
   if (user?.role === 'MUNICIPAL') return null;
-  // The form is for signed-in citizens. A visitor never reaches it, whatever asked for it.
-  if (formKind && user) {
-    return <FollowUpForm key={formKind} report={report} kind={formKind} channels={channels} onCancel={() => setFormKind(null)}
-      onDone={() => { setFormKind(null); setAdded(true); onChanged(); }} />;
-  }
+  const actions = SITE_ACTIONS.filter((a) => !a.closedOnly || CLOSED.has(report.status));
   return (
     <div>
       {added ? <div className="mb-3"><Notice tone="ok" icon={CircleCheck} title={t('form.added')} /></div> : null}
+      <p className="text-[0.875rem] text-ink-2">{t('site.question')}</p>
       {user ? (
-        <div className="grid grid-cols-2 gap-2">
-          {ACTIONS.filter((a) => !a.closedOnly || CLOSED.has(report.status)).map(({ kind, icon }) => (
-            <Button key={kind} variant="secondary" icon={icon} className="h-11! justify-start! px-3! text-[0.875rem]! whitespace-normal! text-left leading-tight" onClick={() => { setAdded(false); setFormKind(kind); }}>
-              {t(`action.${kind}`)}
-            </Button>
-          ))}
-        </div>
-      ) : (
-        <Link to="/login" state={{ from: location.pathname }} className={buttonClass({ variant: 'secondary', block: true })}>{t('action.signIn')}</Link>
-      )}
-      <p className="mt-2 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><Users className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('action.anyone')}</p>
+        <>
+          <div className="mt-2.5 grid grid-cols-2 gap-2" role="group" aria-label={t('site.title')}>
+            {actions.map(({ kind: k, icon: Icon, on }) => (
+              <button key={k} type="button" aria-pressed={kind === k} onClick={() => { setAdded(false); setKind(kind === k ? null : k); }}
+                className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-left text-[0.875rem] leading-tight font-medium transition-colors duration-150 ${kind === k ? on : 'border-line-strong bg-surface text-ink hover:border-ink-3 hover:bg-paper'}`}>
+                <Icon className="size-4 shrink-0" aria-hidden />{t(`action.${k}`)}
+              </button>
+            ))}
+          </div>
+          {kind ? (
+            <div className="mt-3">
+              <FollowUpForm key={kind} report={report} kind={kind} channels={channels} onCancel={() => setKind(null)}
+                onDone={() => { setKind(null); setAdded(true); onChanged(); }} />
+            </div>
+          ) : null}
+        </>
+      ) : <div className="mt-2.5"><SignInToAdd /></div>}
+      <p className="mt-2.5 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><Users className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('action.anyone')}</p>
     </div>
   );
 }
 
 // --- Taking it to BMC ---
 
+const STEP_MARK = {
+  done: 'border-[#bfdcc8] bg-ok-soft text-ok',
+  current: 'border-accent bg-accent text-white',
+  todo: 'border-line-strong bg-surface text-ink-2',
+};
+
+function Step({ n, state, title, summary, open, onToggle, last = false, children }) {
+  const { t } = useI18n();
+  const id = useId();
+  return (
+    <li className="relative pl-10">
+      {last ? null : <span className="absolute top-8 bottom-0 left-[0.8125rem] w-px bg-line" aria-hidden />}
+      <span className={`absolute top-1 left-0 grid size-7 place-items-center rounded-full border text-[0.8125rem] font-semibold ${STEP_MARK[state]}`} aria-hidden>
+        {state === 'done' ? <Check className="size-4" strokeWidth={2.6} /> : n}
+      </span>
+      <h3>
+        <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="flex min-h-9 w-full items-start gap-2 py-1 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">{title}</span>
+            <span className="sr-only"> ({t(`flow.state.${state}`)})</span>
+            {summary ? <span className="num block text-[0.8125rem] break-words text-ink-2">{summary}</span> : null}
+          </span>
+          <ChevronDown className={`mt-1 size-4.5 shrink-0 text-ink-2 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} aria-hidden />
+        </button>
+      </h3>
+      <div id={id} hidden={!open} className="space-y-3 pt-1.5 pb-5 text-[0.875rem]">{children}</div>
+      {open ? null : <div className={last ? '' : 'pb-3'} />}
+    </li>
+  );
+}
+
+function OfficialEntry({ entry }) {
+  const { t, locale } = useI18n();
+  const check = CHECK_STYLE[entry.check];
+  const CheckIcon = check.icon;
+  return (
+    <li className="rounded-lg border border-line bg-paper/60 px-3 py-2">
+      {entry.officialReference ? <p className="num font-medium break-all">{t('trail.ref', { reference: entry.officialReference })}</p> : null}
+      <p className="num text-[0.8125rem] text-ink-2">
+        {[entry.officialChannel, entry.occurredOn ? t('trail.filedOn', { date: fmtDate(entry.occurredOn, locale) }) : null].filter(Boolean).join(' · ')}
+      </p>
+      {entry.note ? <p className="mt-1 max-w-[65ch] whitespace-pre-line">{entry.note}</p> : null}
+      <p className={`mt-1 flex items-start gap-1.5 text-[0.8125rem] ${check.cls}`}><CheckIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t(`trail.check.${entry.check}`)}</p>
+    </li>
+  );
+}
+
 /**
- * Everything needed to file the case with BMC without searching for anything: the complaint
- * already written, the official channels with the pages they were checked on, and the way
- * to record the reference number afterwards.
+ * The official complaint as three steps: send the prepared text to BMC, save the reference
+ * number BMC gives, record what BMC replies. Each step shows what is already on the case and
+ * holds its own short form, so nothing has to be found elsewhere on the page.
+ * `openStep` lets the page open a step from outside (the "what to do next" button).
  */
-export function OfficialKit({ report, wardOffice, authority, onAddReference, onAddResponse }) {
+export function OfficialFlow({ report, wardOffice, authority, onChanged, openStep }) {
   const { t, locale } = useI18n();
   const { user } = useAuth();
+  const citizen = user?.role === 'CITIZEN';
+  const { official } = report.positions;
+  const filings = report.followUps.filter((f) => f.kind === 'OFFICIAL_COMPLAINT' && f.check !== 'SET_ASIDE');
+  const replies = report.followUps.filter((f) => f.kind === 'OFFICIAL_RESPONSE' && f.check !== 'SET_ASIDE');
+  const filed = official.state !== 'NONE';
+  const current = !filed ? 'send' : replies.length === 0 ? 'reply' : null;
+  const [open, setOpen] = useState(current);
+  const [adding, setAdding] = useState(null); // 'reference' | 'reply'
   const [copied, setCopied] = useState(false);
+  useEffect(() => { if (openStep?.step) setOpen(openStep.step); }, [openStep]);
+  const toggle = (step) => setOpen(open === step ? null : step);
   const draft = useMemo(() => complaintDraft({ report, wardOffice, authority, t, locale }), [report, wardOffice, authority, t, locale]);
-  const filed = report.positions.official.state !== 'NONE';
   const copy = async () => {
     if (await copyText(draft)) {
       setCopied(true);
@@ -346,69 +436,114 @@ export function OfficialKit({ report, wardOffice, authority, onAddReference, onA
     }
   };
   const share = () => navigator.share({ text: draft }).catch(() => {});
+  const done = () => { setAdding(null); onChanged(); };
   const online = authority.channels.filter((c) => !c.phone && c.key !== 'mpcb-sro' && c.key !== 'ward-office');
   const helpline = authority.channels.find((c) => c.phone);
   const escalate = authority.channels.filter((c) => c.key === 'mpcb-sro' || c.key === 'ward-office');
   const wardPhone = wardOffice?.phone?.split(' (')[0];
-  const location = useLocation();
+  const latest = filings.at(-1);
 
   return (
-    <div className="space-y-4 text-[0.875rem]">
-      <p className="text-ink-2">{t('kit.intro')}</p>
-
-      <div>
-        <h3 className="font-medium">{t('kit.step1')}</h3>
-        <textarea readOnly rows={7} aria-label={t('kit.draftLabel')} value={draft} onFocus={(e) => e.target.select()}
-          className="mt-1.5 block w-full resize-y rounded-lg border border-line-strong bg-paper px-3 py-2 text-[0.8125rem] leading-relaxed text-ink" />
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Button size="sm" icon={copied ? Check : Copy} onClick={copy}><span aria-live="polite">{t(copied ? 'kit.copied' : 'kit.copy')}</span></Button>
-          {typeof navigator.share === 'function' ? <Button variant="secondary" size="sm" icon={Share2} onClick={share}>{t('share.other')}</Button> : null}
-        </div>
-        {report.description ? null : <p className="mt-1.5 text-[0.8125rem] text-ink-3">{t('kit.describeYourself')}</p>}
-      </div>
-
-      <div>
-        <h3 className="font-medium">{t('kit.step2')}</h3>
-        <ul className="mt-1.5 space-y-2">
-          {online.map((c) => (
-            <li key={c.key}>
-              <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-accent underline">{c.name}<ExternalLink className="size-3.5" aria-hidden /></a>
-              <span className="block text-[0.8125rem] text-ink-2">{c.detail}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {helpline ? <a href={`tel:${helpline.phone}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}><Phone className="size-4" aria-hidden />{t('kit.call', { number: helpline.phone })}</a> : null}
-          {wardPhone ? (
-            <a href={`tel:${wardPhone.replace(/[^\d+]/g, '')}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
-              <Building2 className="size-4" aria-hidden /><span className="num">{t('kit.wardControl')} {wardPhone}</span>
-            </a>
-          ) : null}
-        </div>
-        <p className="num mt-1.5 text-[0.75rem] text-ink-3">{t('kit.checked', { date: fmtDate(authority.verifiedOn, locale) })}</p>
-      </div>
-
-      <div>
-        <h3 className="font-medium">{t(filed ? 'kit.step3Filed' : 'kit.step3')}</h3>
-        <p className="mt-0.5 text-ink-2">{t(filed ? 'kit.step3FiledBody' : 'kit.step3Body')}</p>
-        {user?.role === 'CITIZEN' ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" icon={FileCheck} onClick={onAddReference}>{t('action.OFFICIAL_COMPLAINT')}</Button>
-            {filed ? <Button variant="secondary" size="sm" icon={Landmark} onClick={onAddResponse}>{t('action.OFFICIAL_RESPONSE')}</Button> : null}
+    <div>
+      <p className="mb-4 text-[0.875rem] text-ink-2">{t('kit.intro')}</p>
+      <ol>
+        <Step n={1} state={filed ? 'done' : 'current'} title={t('flow.send')} open={open === 'send'} onToggle={() => toggle('send')}>
+          <div>
+            <textarea readOnly rows={6} aria-label={t('kit.draftLabel')} value={draft} onFocus={(e) => e.target.select()}
+              className="block w-full resize-y rounded-lg border border-line-strong bg-paper px-3 py-2 text-[0.8125rem] leading-relaxed text-ink" />
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" icon={copied ? Check : Copy} onClick={copy}><span aria-live="polite">{t(copied ? 'kit.copied' : 'kit.copy')}</span></Button>
+              {typeof navigator.share === 'function' ? <Button variant="secondary" size="sm" icon={Share2} onClick={share}>{t('share.other')}</Button> : null}
+            </div>
+            {report.description ? null : <p className="mt-1.5 text-[0.8125rem] text-ink-3">{t('kit.describeYourself')}</p>}
           </div>
-        ) : user ? null : (
-          <Link to="/login" state={{ from: location.pathname }} className={`${buttonClass({ variant: 'secondary', size: 'sm' })} mt-2`}>{t('action.signIn')}</Link>
-        )}
-      </div>
+          <div>
+            <p className="font-medium">{t('flow.where')}</p>
+            <ul className="mt-1.5 grid gap-2 sm:grid-cols-2">
+              {online.map((c) => (
+                <li key={c.key} className="rounded-lg border border-line px-3 py-2">
+                  <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-accent underline">{c.name}<ExternalLink className="size-3.5" aria-hidden /></a>
+                  <span className="block text-[0.8125rem] text-ink-2">{c.detail}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {helpline ? <a href={`tel:${helpline.phone}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}><Phone className="size-4" aria-hidden />{t('kit.call', { number: helpline.phone })}</a> : null}
+              {wardPhone ? (
+                <a href={`tel:${wardPhone.replace(/[^\d+]/g, '')}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                  <Building2 className="size-4" aria-hidden /><span className="num">{t('kit.wardControl')} {wardPhone}</span>
+                </a>
+              ) : null}
+            </div>
+            <p className="num mt-1.5 text-[0.75rem] text-ink-3">{t('kit.checked', { date: fmtDate(authority.verifiedOn, locale) })}</p>
+          </div>
+          {citizen && !filed ? <Button variant="secondary" size="sm" icon={ArrowRight} onClick={() => setOpen('reference')}>{t('flow.sent')}</Button> : null}
+        </Step>
 
-      <div>
-        <h3 className="font-medium">{t('kit.escalate')}</h3>
-        <ul className="mt-1 space-y-1.5 text-ink-2">
-          {escalate.map((c) => (
-            <li key={c.key}><a href={c.url} target="_blank" rel="noreferrer" className="font-medium text-accent underline">{c.name}</a> · {c.detail}</li>
-          ))}
+        <Step n={2} state={filed ? 'done' : open === 'reference' ? 'current' : 'todo'} title={t('flow.reference')}
+          summary={latest?.officialReference ? t('trail.ref', { reference: latest.officialReference }) : null}
+          open={open === 'reference'} onToggle={() => toggle('reference')}>
+          {filings.length ? <ul className="space-y-2">{filings.map((entry) => <OfficialEntry key={entry.id} entry={entry} />)}</ul> : null}
+          <p className="text-ink-2">{t('kit.step3Body')}</p>
+          {!citizen ? (user ? null : <SignInToAdd />)
+            : !filed || adding === 'reference' ? <FollowUpForm report={report} kind="OFFICIAL_COMPLAINT" channels={authority.channels} onDone={done} onCancel={filed ? () => setAdding(null) : null} />
+              : <Button variant="secondary" size="sm" icon={FileCheck} onClick={() => setAdding('reference')}>{t('flow.addAnother')}</Button>}
+        </Step>
+
+        <Step n={3} last state={replies.length ? 'done' : filed ? 'current' : 'todo'} title={t('flow.reply')}
+          summary={replies.length ? t('case.official.ACTION_DOCUMENTED') : official.daysWithoutResponse >= 1 ? t('case.official.waiting', { days: official.daysWithoutResponse }) : null}
+          open={open === 'reply'} onToggle={() => toggle('reply')}>
+          {replies.length ? <ul className="space-y-2">{replies.map((entry) => <OfficialEntry key={entry.id} entry={entry} />)}</ul> : null}
+          {!filed ? <p className="text-ink-2">{t('flow.replyLocked')}</p>
+            : !citizen ? (user ? null : <SignInToAdd />)
+              : adding === 'reply' ? <FollowUpForm report={report} kind="OFFICIAL_RESPONSE" channels={authority.channels} onDone={done} onCancel={() => setAdding(null)} />
+                : <Button variant="secondary" size="sm" icon={Landmark} onClick={() => setAdding('reply')}>{t('action.OFFICIAL_RESPONSE')}</Button>}
+          {filed ? (
+            <div>
+              <p className="font-medium">{t('kit.escalate')}</p>
+              <ul className="mt-1 space-y-1.5 text-ink-2">
+                {escalate.map((c) => (
+                  <li key={c.key}><a href={c.url} target="_blank" rel="noreferrer" className="font-medium text-accent underline">{c.name}</a> · {c.detail}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </Step>
+      </ol>
+    </div>
+  );
+}
+
+// --- Photographs ---
+
+/** What is said under any image that came with the demo data. */
+export function DemoImageNote({ className = '' }) {
+  const { t } = useI18n();
+  return <p className={`flex items-start gap-1.5 text-[0.75rem] text-warn ${className}`}><DemoTag className="shrink-0" /><span>{t('demo.imageNote')}</span></p>;
+}
+
+/**
+ * Public photographs: the first one large when `lead` is set, the rest as thumbnails.
+ * `demo` marks them as illustrative images from the demo data, not evidence from a site.
+ * @param {{photos: Array<{id: string, src: string, alt: string}>, demo?: boolean, lead?: boolean, label?: string}} props
+ */
+export function PhotoGrid({ photos, demo = false, lead = false, label, className = '' }) {
+  if (photos.length === 0) return null;
+  const [first, ...rest] = lead ? photos : [null, ...photos];
+  const tile = (photo, shape) => (
+    <a href={photo.src} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-lg border border-line bg-mute-soft">
+      <img src={photo.src} alt={photo.alt} loading="lazy" className={`w-full object-cover ${shape}`} />
+    </a>
+  );
+  return (
+    <div className={className}>
+      {first ? tile(first, 'aspect-[4/3]') : null}
+      {rest.length ? (
+        <ul className={`grid grid-cols-3 gap-2 ${first ? 'mt-2' : ''}`} aria-label={label}>
+          {rest.map((photo) => <li key={photo.id}>{tile(photo, 'aspect-square')}</li>)}
         </ul>
-      </div>
+      ) : null}
+      {demo ? <DemoImageNote className="mt-1.5" /> : null}
     </div>
   );
 }
@@ -446,13 +581,8 @@ function TrailEntry({ entry }) {
       ) : null}
       {entry.note ? <p className="mt-1 max-w-[65ch] whitespace-pre-line">{entry.note}</p> : null}
       {entry.photos.length ? (
-        <ul className="mt-2 grid grid-cols-3 gap-2">
-          {entry.photos.map((photo, i) => (
-            <li key={photo.id} className="overflow-hidden rounded-lg border border-line">
-              <a href={apiUrl(photo.url)} target="_blank" rel="noreferrer"><img src={apiUrl(photo.url)} alt={t('trail.photoAlt', { n: i + 1 })} loading="lazy" className="aspect-square w-full object-cover" /></a>
-            </li>
-          ))}
-        </ul>
+        <PhotoGrid className="mt-2 max-w-md" demo={entry.isDemo}
+          photos={entry.photos.map((photo, i) => ({ id: photo.id, src: apiUrl(photo.url), alt: t('trail.photoAlt', { n: i + 1 }) }))} />
       ) : null}
       {entry.check === 'UNCHECKED' && (entry.photoCount > 0 || !OFFICIAL_KINDS.has(entry.kind) || entry.kind === 'OFFICIAL_RESPONSE') ? (
         <p className="mt-1 flex items-start gap-1.5 text-ink-2"><EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('trail.withheld', { count: entry.photoCount })}</p>
@@ -475,9 +605,11 @@ export function EvidenceTrail({ report }) {
     ...report.followUps,
   ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)), [report.timeline, report.followUps]);
   return (
-    <ol className="space-y-4">
-      {entries.map((entry) => (
-        <li key={`${entry.track}-${entry.id}`} className="text-[0.875rem]">
+    <ol>
+      {entries.map((entry, i) => (
+        <li key={`${entry.track}-${entry.id}`} className="relative pb-5 pl-6 text-[0.875rem] last:pb-0">
+          {i === entries.length - 1 ? null : <span className="absolute top-3 bottom-0 left-[0.3125rem] w-px bg-line" aria-hidden />}
+          <span className={`absolute top-1.5 left-0 size-[0.6875rem] rounded-[3px] ring-2 ring-surface ${SWATCH[entry.track] ?? SWATCH.CITIZEN}`} aria-hidden />
           <p className="mb-1 flex flex-wrap items-center gap-2">
             <span className={`rounded-md border px-1.5 py-0.5 text-[0.6875rem] font-semibold tracking-wide uppercase ${TRACK_STYLE[entry.track]}`}>{t(`trail.track.${entry.track}`)}</span>
             <time dateTime={entry.createdAt} className="num text-[0.8125rem] text-ink-2">{fmtDateTime(entry.createdAt, locale)}</time>

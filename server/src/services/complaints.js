@@ -3,6 +3,7 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { withStoredAttachments } from '../lib/storage.js';
 import { observationView } from './views.js';
 import { localityOfWard, wardAt } from './wards.js';
 
@@ -186,13 +187,13 @@ export async function updateFindings(id, actor, { findings, correctiveAction }) 
 export async function addEvidence(id, actor, rows, caption) {
   const complaint = await loadComplaint(id);
   if (isClosed(complaint.status)) throw conflict('Evidence cannot be added to a closed complaint');
-  await prisma.$transaction([
-    prisma.attachment.createMany({ data: rows }),
+  await withStoredAttachments(rows, (stored) => prisma.$transaction([
+    prisma.attachment.createMany({ data: stored }),
     prisma.complaintEvent.create({
       data: {
         complaintId: id, actorId: actor.id, type: 'EVIDENCE_UPLOADED', note: caption || null,
         metadata: { files: rows.map((r) => r.filename) },
       },
     }),
-  ]);
+  ]));
 }

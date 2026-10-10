@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config.js';
 import { prisma } from './db.js';
+import { storageDriver, storageReady } from './lib/storage.js';
 import { getModelInfo } from './services/modelClient.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -32,8 +33,12 @@ export function createApp() {
     } catch {
       return res.status(503).json({ status: 'unavailable', database: false });
     }
-    const model = await getModelInfo();
-    return res.json({ status: 'ok', database: true, modelReady: model.ready });
+    const [model, storage] = await Promise.all([getModelInfo(), storageReady()]);
+    // Uploads fail without the attachment store, so it fails the check; the model does not.
+    return res.status(storage ? 200 : 503).json({
+      status: storage ? 'ok' : 'unavailable', database: true, modelReady: model.ready,
+      attachmentStorage: storageDriver, attachmentStorageReady: storage,
+    });
   });
   app.use('/api/auth', authRoutes);
 
