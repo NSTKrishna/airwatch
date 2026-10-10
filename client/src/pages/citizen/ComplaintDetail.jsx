@@ -1,44 +1,17 @@
 import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, CircleCheck, CircleX, MapPin } from 'lucide-react';
+import { ArrowLeft, CircleCheck, EyeOff, MapPin } from 'lucide-react';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
-import { STATUS_ORDER, fmtDateTime } from '../../lib/format.js';
+import { fmtDateTime } from '../../lib/format.js';
+import { WardOffice } from '../../components/civic.jsx';
+import ReportProgress from '../../components/ReportProgress.jsx';
 import { ReadingComparison } from '../../components/Reading.jsx';
 import { AuthImage, LoadError, Notice, Panel, SourceTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
 
-function Progress({ complaint }) {
-  const { t, locale } = useI18n();
-  const reached = new Map(complaint.timeline.filter((e) => e.toStatus).map((e) => [e.toStatus, e.createdAt]));
-  const rejected = complaint.status === 'REJECTED';
-  // A rejected report ends where it was rejected; later steps never happen.
-  const steps = rejected ? [...STATUS_ORDER.filter((s) => reached.has(s)), 'REJECTED'] : STATUS_ORDER;
-  return (
-    <ol className="mt-3">
-      {steps.map((status, i) => {
-        const at = reached.get(status);
-        const done = Boolean(at);
-        const last = i === steps.length - 1;
-        return (
-          <li key={status} className="relative flex gap-3 pb-5 last:pb-0">
-            {!last ? <span className={`absolute top-6 left-[0.6875rem] h-[calc(100%-1.5rem)] w-0.5 ${done && reached.has(steps[i + 1]) ? 'bg-accent' : 'bg-line'}`} aria-hidden /> : null}
-            <span className={`relative grid size-6 shrink-0 place-items-center rounded-full border-2 ${done ? (status === 'REJECTED' ? 'border-ink-2 bg-ink-2 text-white' : 'border-accent bg-accent text-white') : 'border-line-strong bg-surface'}`}>
-              {done ? (status === 'REJECTED' ? <CircleX className="size-3.5" aria-hidden /> : <Check className="size-3.5" strokeWidth={3} aria-hidden />) : null}
-            </span>
-            <div className="-mt-0.5">
-              <p className={`font-medium ${done ? 'text-ink' : 'text-ink-3'}`}>{t(`status.${status}`)}</p>
-              <p className="num text-[0.8125rem] text-ink-2">{done ? fmtDateTime(at, locale) : t('detail.step.pending')}</p>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 export default function ComplaintDetail() {
   const { id } = useParams();
-  const { t, locale, place } = useI18n();
+  const { t, locale } = useI18n();
   const location = useLocation();
   const { data, error, loading, reload } = useApi(`/complaints/${id}`, { pollMs: 45_000 });
   const c = data?.complaint;
@@ -66,8 +39,8 @@ export default function ComplaintDetail() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl leading-snug font-semibold tracking-tight">{c.site?.name || c.locationText || t('complaints.unlistedSite')}</h1>
-          <p className="num mt-0.5 text-[0.875rem] text-ink-2">{c.reference} · {place(c.locality)}</p>
+          <h1 className="text-xl leading-snug font-semibold tracking-tight">{c.project?.name || c.site?.name || c.locationText || t('complaints.unlistedSite')}</h1>
+          <p className="num mt-0.5 text-[0.875rem] text-ink-2">{c.reference} · {c.ward ? t('ward.title', { name: c.ward.name }) : c.locality?.name}</p>
         </div>
         <StatusPill status={c.status} />
       </div>
@@ -84,8 +57,19 @@ export default function ComplaintDetail() {
 
       <Panel className="p-4 sm:p-5">
         <h2 className="font-semibold">{t('detail.progress')}</h2>
-        <Progress complaint={c} />
+        <div className="mt-3"><ReportProgress status={c.status} timeline={c.timeline} /></div>
+        <p className="mt-3 text-[0.8125rem] text-ink-2">{t('pub.notOfficial')}</p>
+        {c.publicHidden
+          ? <p className="mt-3 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('detail.hidden')}</p>
+          : c.ward ? <p className="mt-3 text-[0.875rem]"><Link to={`/report/${c.reference}`} className="font-medium text-accent underline">{t('detail.publicPage')}</Link></p> : null}
       </Panel>
+
+      {c.wardOffice ? (
+        <Panel className="p-4 sm:p-5">
+          <h2 className="mb-2.5 font-semibold">{t('pub.routedTo')}</h2>
+          <WardOffice office={c.wardOffice} />
+        </Panel>
+      ) : null}
 
       <Panel className="p-4 sm:p-5">
         <h2 className="font-semibold">{t('detail.yourReport')}</h2>

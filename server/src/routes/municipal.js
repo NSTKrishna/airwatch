@@ -7,7 +7,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { imageUpload, toAttachmentRows } from '../lib/uploads.js';
 import { parse } from '../middleware/validate.js';
 import {
-  STATUSES, TRANSITIONS, addEvidence, addNote, assignOfficer, changeStatus, updateFindings,
+  STATUSES, TRANSITIONS, addEvidence, addNote, assignOfficer, changeStatus, setVisibility, updateFindings,
 } from '../services/complaints.js';
 import { deviceView, generateToken, hashToken, tokenHint } from '../services/devices.js';
 import { SCENARIOS, publishSimulatedReadings } from '../services/mockSensorProvider.js';
@@ -63,6 +63,7 @@ router.get('/officers', async (_req, res) => {
 const listQuery = z.object({
   status: z.enum(STATUSES).optional(),
   locality: z.string().optional(),
+  ward: z.string().optional(), // ward slug
   assignee: z.string().optional(), // "me", "unassigned" or an officer id
   anomaly: z.enum(['yes', 'no']).optional(),
   q: z.string().trim().max(100).optional(),
@@ -75,6 +76,7 @@ router.get('/complaints', async (req, res) => {
   const where = {};
   if (query.status) where.status = query.status;
   if (query.locality) where.locality = { code: query.locality };
+  if (query.ward) where.ward = { slug: query.ward };
   if (query.assignee === 'me') where.assignedOfficerId = req.user.id;
   else if (query.assignee === 'unassigned') where.assignedOfficerId = null;
   else if (query.assignee) where.assignedOfficerId = query.assignee;
@@ -85,6 +87,7 @@ router.get('/complaints', async (req, res) => {
       { description: contains },
       { locationText: contains },
       { site: { is: { OR: [{ name: contains }, { code: contains }, { address: contains }] } } },
+      { project: { is: { OR: [{ name: contains }, { code: contains }, { registrationNo: contains }] } } },
       { citizen: { is: { name: contains } } },
     ];
     // References look like AW-2026-00042; allow searching by the reference or its number.
@@ -96,7 +99,7 @@ router.get('/complaints', async (req, res) => {
     prisma.complaint.count({ where }),
     prisma.complaint.findMany({
       where,
-      include: { locality: true, site: true, citizen: true, assignedOfficer: true, _count: { select: { attachments: true } } },
+      include: { locality: true, site: true, ward: true, project: true, citizen: true, assignedOfficer: true, _count: { select: { attachments: true } } },
       orderBy: { createdAt: 'desc' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -141,6 +144,13 @@ router.post('/complaints/:id/notes', async (req, res) => {
   const { note } = parse(z.object({ note: z.string().trim().min(1, 'Write a note').max(2000) }), req.body);
   await addNote(req.params.id, req.user, note);
   await sendDetail(res, req.params.id, 201);
+});
+
+// Moderation of what the public map shows. It does not change the case or its status.
+router.post('/complaints/:id/visibility', async (req, res) => {
+  const input = parse(z.object({ hidden: z.boolean(), reason: text(500) }), req.body);
+  await setVisibility(req.params.id, req.user, input);
+  await sendDetail(res, req.params.id);
 });
 
 router.put('/complaints/:id/findings', async (req, res) => {

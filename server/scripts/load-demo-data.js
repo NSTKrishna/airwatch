@@ -1,7 +1,7 @@
 // Load demonstration history: simulated device readings for the past days, each
-// evaluated by the REAL model service, plus a few sample complaints.
+// evaluated by the REAL model service, plus demo case history at the pilot's projects.
 //
-//   node scripts/load-demo-data.js [--days 7] [--no-complaints]
+//   node scripts/load-demo-data.js [--days 7] [--no-complaints] [--no-readings]
 //
 // This is the only place where a past reading is evaluated: the model accepts
 // only fresh timestamps, so each one is sent with the current time and stored
@@ -24,7 +24,6 @@ const daysArg = Number(args[args.indexOf('--days') + 1]);
 const days = args.includes('--days') && daysArg > 0 ? daysArg : 7;
 const HOUR_MS = 3_600_000;
 const QUARTER_MS = 900_000;
-const DEMO_PREFIX = 'Demo report: ';
 
 // Plain placeholder image so demo complaints have an attachment. Not a real photograph.
 function placeholderPng(width, height, [r, g, b]) {
@@ -102,9 +101,51 @@ async function backfill(devices) {
   console.log(`History: ${created} simulated readings across ${devices.length} devices over ${days} days`, counts, `(${anomalies} PM10 excess flags)`);
 }
 
+// Demo case history: construction-dust reports at the pilot's verified projects, spread over
+// the past ten days and across every stage of the lifecycle. Each is stored with isDemo = true
+// and shown as demo history wherever it appears. `ward` and `project` index the pilot's wards
+// and that ward's monitored projects, so the history follows whatever the reference data holds.
+const HISTORY = [
+  { ward: 0, project: 0, hoursAgo: 3, stage: 'SUBMITTED', text: 'Dust blowing across the road from uncovered excavated soil since morning. No water sprinkling seen.' },
+  { ward: 0, project: 1, hoursAgo: 28, stage: 'UNDER_REVIEW', text: 'Dumpers leaving the site without covers and dropping soil on the service road. The dust hangs in the air all afternoon.' },
+  { ward: 0, project: 2, hoursAgo: 77, stage: 'INSPECTION_ASSIGNED', text: 'Barricade sheets are torn on the road side, and cutting work throws dust straight onto the footpath.',
+    instruction: 'Check barricade height and whether wet cutting is in use.' },
+  { ward: 0, project: 0, hoursAgo: 190, stage: 'RESOLVED', text: 'Debris heap left uncovered next to the compound wall. Dust settles on the cars parked in the lane.',
+    note: 'Visited the site. Debris stack on the north side had no cover; sprinkler line was not running.',
+    findings: 'Construction debris was stored uncovered along the north boundary and no sprinkling was in progress during the visit.',
+    action: 'Site supervisor told to cover the debris with tarpaulin and run the sprinkler line during working hours. Re-check noted for one week later.' },
+  { ward: 1, project: 0, hoursAgo: 6, stage: 'SUBMITTED', text: 'Thick dust near the gate whenever trucks enter. Wheels are not being washed and the road is brown with mud.' },
+  { ward: 1, project: 1, hoursAgo: 40, stage: 'UNDER_REVIEW', text: 'Concrete breaking work in the open without any screen. Fine dust reaches the bus stop across the road.' },
+  { ward: 1, project: 2, hoursAgo: 120, stage: 'RESOLVED', text: 'Sand and aggregate piled in the open, uncovered. Wind carries it into the housing society next door.',
+    note: 'Material stack confirmed uncovered on the east side. Photographed.',
+    findings: 'Loose sand and aggregate were stockpiled without a cover on the east side of the plot.',
+    action: 'Contractor told to cover stockpiles and wet them twice a day. Cover was in place at the follow-up visit.' },
+  { ward: 1, project: 0, hoursAgo: 150, stage: 'REJECTED', text: 'Dust on the main road in the evening near the signal.',
+    reason: 'The photographs show road sweeping on the public road, not work at a construction site. Outside this pilot\'s single category.' },
+  { ward: 2, project: 0, hoursAgo: 10, stage: 'SUBMITTED', text: 'Demolition of the old structure going on with no water spray. The whole lane is covered in grey dust.' },
+  { ward: 2, project: 1, hoursAgo: 55, stage: 'INSPECTION_ASSIGNED', text: 'Excavated earth loaded onto trucks all night with no covers. Dust inside our flats by morning.',
+    instruction: 'Night visit if possible; check truck covers and wheel washing.' },
+  { ward: 2, project: 2, hoursAgo: 96, stage: 'UNDER_REVIEW', text: 'No green net or sheet on the upper floors where plastering and grinding are in progress.' },
+  { ward: 2, project: 1, hoursAgo: 215, stage: 'RESOLVED', text: 'Dry cutting of stone at the entrance in the open. Clouds of white dust during the day.',
+    note: 'Dry cutting confirmed at the entrance bay; no misting in use.',
+    findings: 'Stone cutting was being done dry at the entrance bay without wet suppression or an enclosure.',
+    action: 'Contractor told to move cutting inside an enclosed bay and use wet cutting. Enclosure seen in place at the follow-up visit.' },
+  { ward: 3, project: 0, hoursAgo: 4, stage: 'SUBMITTED', text: 'Road outside the site is full of loose soil from the trucks. Every passing vehicle raises dust.' },
+  { ward: 3, project: 1, hoursAgo: 33, stage: 'UNDER_REVIEW', text: 'Piling work with heaps of excavated soil lying open along the road for several days.' },
+  { ward: 3, project: 2, hoursAgo: 82, stage: 'INSPECTION_ASSIGNED', text: 'Debris being thrown down from upper floors without a chute. Dust cloud every time.',
+    instruction: 'Check for a debris chute and covered storage.' },
+  { ward: 3, project: 0, hoursAgo: 170, stage: 'RESOLVED', text: 'No sprinkling at all during excavation. Dust visible from our building through the day.',
+    note: 'Excavation in progress; tanker on site but not in use at the time of the visit.',
+    findings: 'Excavation was in progress without water sprinkling although a tanker was available on site.',
+    action: 'Site told to sprinkle during excavation and loading. Sprinkling was observed at the follow-up visit.' },
+  { ward: 0, project: null, hoursAgo: 60, stage: 'UNDER_REVIEW', text: 'Small plot being dug up behind the shops with no barricade at all. Not on your project list.' },
+  { ward: 2, project: null, hoursAgo: 130, stage: 'REJECTED', text: 'Dust in the air near the junction, source not clear.',
+    reason: 'No construction activity could be identified from the photographs or the location given.' },
+];
+
 async function demoComplaints(sites) {
-  if (await prisma.complaint.count({ where: { description: { startsWith: DEMO_PREFIX }, locality: { active: true } } })) {
-    console.log('Demo complaints already exist for the current localities; skipping.');
+  if (await prisma.complaint.count({ where: { isDemo: true, locality: { active: true } } })) {
+    console.log('Demo case history already exists for the current wards; skipping.');
     return;
   }
   const users = Object.fromEntries((await prisma.user.findMany()).map((u) => [u.email, u]));
@@ -112,79 +153,85 @@ async function demoComplaints(sites) {
   const officer = users['officer@airwatch.test'];
   const inspector = users['inspector@airwatch.test'];
   if (!citizen || !officer || !inspector) throw new Error('Run `npm run db:seed` first: demo accounts are missing');
-  const site = (code) => sites.find((s) => s.code === code);
 
-  const create = async ({ siteCode, localityCode, text, locationText, colour, hoursAgo }) => {
-    const target = siteCode ? site(siteCode) : null;
-    const locality = target?.locality ?? await prisma.locality.findUnique({ where: { code: localityCode } });
-    const evidence = await captureSiteEvidence(target?.id);
-    const createdAt = new Date(Date.now() - hoursAgo * HOUR_MS);
+  const wards = await prisma.ward.findMany({ where: { pilot: true }, orderBy: { code: 'asc' } });
+  const sitesOf = (ward) => sites.filter((s) => s.project?.wardId === ward.id);
+  const tone = (i) => [[196, 170, 130], [176, 160, 140], [188, 150, 118], [170, 165, 150], [182, 176, 160]][i % 5];
+
+  let created = 0;
+  for (const [index, h] of HISTORY.entries()) {
+    const ward = wards[h.ward % wards.length];
+    const wardSites = sitesOf(ward);
+    if (wardSites.length === 0) continue;
+    const site = wardSites[(h.project ?? 0) % wardSites.length];
+    const named = h.project !== null;
+    const locality = await prisma.locality.findFirst({ where: { wardId: ward.id, active: true } });
+    const createdAt = new Date(Date.now() - h.hoursAgo * HOUR_MS);
+    const evidence = named ? await captureSiteEvidence(site.id) : { anomalyEvaluationId: null, sensorSnapshot: null };
+    // A report that names no project still needs a place: a few hundred metres from a listed
+    // project, in the same ward, and labelled as a demo location.
+    const spot = named ? site : { latitude: +(site.latitude + 0.0042).toFixed(6), longitude: +(site.longitude - 0.0036).toFixed(6) };
     const complaint = await prisma.complaint.create({
       data: {
-        citizenId: citizen.id, localityId: locality.id, siteId: target?.id ?? null, createdAt,
-        description: DEMO_PREFIX + text, locationText: locationText ?? null,
-        latitude: target?.latitude ?? locality.latitude, longitude: target?.longitude ?? locality.longitude,
+        citizenId: citizen.id, localityId: locality.id, wardId: ward.id, isDemo: true, createdAt,
+        projectId: named ? site.projectId : null, siteId: named ? site.id : null,
+        description: h.text, locationText: named ? null : 'Demo location, not a real address',
+        latitude: spot.latitude, longitude: spot.longitude,
         anomalyEvaluationId: evidence.anomalyEvaluationId, sensorSnapshot: evidence.sensorSnapshot ?? undefined,
       },
     });
     await prisma.attachment.createMany({
-      data: toAttachmentRows([{ originalname: 'placeholder-photo.png', buffer: placeholderPng(480, 360, colour) }],
+      data: toAttachmentRows([{ originalname: 'placeholder-photo.png', buffer: placeholderPng(480, 360, tone(index)) }],
         { complaintId: complaint.id, uploadedById: citizen.id, kind: 'CITIZEN_PHOTO' }),
     });
     await prisma.complaintEvent.create({
       data: { complaintId: complaint.id, actorId: citizen.id, type: 'SUBMITTED', toStatus: 'SUBMITTED', createdAt,
-        metadata: { anomalyEvidenceAttached: Boolean(evidence.anomalyEvaluationId), photos: 1 } },
+        metadata: { anomalyEvidenceAttached: Boolean(evidence.anomalyEvaluationId), photos: 1, routedToWard: ward.code } },
     });
-    return complaint.id;
-  };
 
-  await create({ siteCode: 'MUM-AND-01', hoursAgo: 1, colour: [196, 170, 130],
-    text: 'Dust blowing across the road from uncovered excavated soil. No water sprinkling seen since morning.' });
-
-  const review = await create({ siteCode: 'MUM-KUR-01', hoursAgo: 6, colour: [176, 160, 140],
-    text: 'Trucks leaving the site without covers, leaving a trail of dust on the service lane.' });
-  await changeStatus(review, officer, { status: 'UNDER_REVIEW' });
-
-  const assigned = await create({ siteCode: 'MUM-BAN-02', hoursAgo: 20, colour: [188, 150, 118],
-    text: 'Demolition debris piled near the boundary wall with no barricade sheets. Dust reaches the bus stop.' });
-  await changeStatus(assigned, officer, { status: 'UNDER_REVIEW' });
-  await changeStatus(assigned, officer, { status: 'INSPECTION_ASSIGNED', officerId: inspector.id, note: 'Please check barricading and debris cover.' });
-
-  const resolved = await create({ siteCode: 'MUM-POW-01', hoursAgo: 50, colour: [170, 165, 150],
-    text: 'Cutting and grinding work in the open without wet suppression. Fine dust settling on parked vehicles.' });
-  await changeStatus(resolved, officer, { status: 'UNDER_REVIEW' });
-  await changeStatus(resolved, officer, { status: 'INSPECTION_ASSIGNED', officerId: inspector.id });
-  await addNote(resolved, inspector, 'Visited site. Dry cutting confirmed at the east face; no misting in use.');
-  await addEvidence(resolved, inspector,
-    toAttachmentRows([{ originalname: 'placeholder-inspection.png', buffer: placeholderPng(480, 360, [150, 158, 150]) }],
-      { complaintId: resolved, uploadedById: inspector.id, kind: 'INSPECTION_EVIDENCE', caption: 'East face cutting area (placeholder image)' }),
-    'East face cutting area (placeholder image)');
-  await changeStatus(resolved, inspector, {
-    status: 'RESOLVED',
-    findings: 'Dry cutting was in progress without wet suppression at the east face.',
-    correctiveAction: 'Contractor instructed to use wet cutting and misting. Compliance to be re-checked in 7 days.',
-  });
-
-  const rejected = await create({ localityCode: 'MUM-AND', hoursAgo: 30, colour: [182, 176, 160],
-    locationText: 'Service road near the station',
-    text: 'Dust from road sweeping in the morning, not from a construction site.' });
-  await changeStatus(rejected, officer, { status: 'UNDER_REVIEW' });
-  await changeStatus(rejected, officer, { status: 'REJECTED', note: 'Not related to construction activity. Forwarded to the sanitation department.' });
-
-  console.log('Created 5 demo complaints (one per lifecycle stage).');
+    // Walk the case through the real lifecycle functions, then spread the audit trail over the
+    // time since it was filed so the history reads as it would have happened.
+    const id = complaint.id;
+    if (h.stage !== 'SUBMITTED') await changeStatus(id, officer, { status: 'UNDER_REVIEW' });
+    if (h.stage === 'REJECTED') await changeStatus(id, officer, { status: 'REJECTED', note: h.reason });
+    if (['INSPECTION_ASSIGNED', 'RESOLVED'].includes(h.stage)) {
+      await changeStatus(id, officer, { status: 'INSPECTION_ASSIGNED', officerId: inspector.id, note: h.instruction });
+    }
+    if (h.stage === 'RESOLVED') {
+      await addNote(id, inspector, h.note);
+      await addEvidence(id, inspector,
+        toAttachmentRows([{ originalname: 'placeholder-inspection.png', buffer: placeholderPng(480, 360, [150, 158, 150]) }],
+          { complaintId: id, uploadedById: inspector.id, kind: 'INSPECTION_EVIDENCE', caption: 'Placeholder image, not a photograph of the site' }),
+        'Placeholder image, not a photograph of the site');
+      await changeStatus(id, inspector, { status: 'RESOLVED', findings: h.findings, correctiveAction: h.action });
+    }
+    const later = await prisma.complaintEvent.findMany({ where: { complaintId: id, type: { not: 'SUBMITTED' } }, orderBy: { createdAt: 'asc' } });
+    const span = Math.min(h.hoursAgo * 0.8, 96) * HOUR_MS;
+    let last = createdAt;
+    for (const [i, event] of later.entries()) {
+      last = new Date(createdAt.getTime() + (span * (i + 1)) / (later.length + 1));
+      await prisma.complaintEvent.update({ where: { id: event.id }, data: { createdAt: last } });
+    }
+    await prisma.$executeRaw`UPDATE "Complaint" SET "updatedAt" = ${last} WHERE id = ${id}`;
+    created += 1;
+  }
+  console.log(`Created ${created} demo cases across ${wards.length} pilot wards, labelled as demo history.`);
 }
 
 async function main() {
-  const info = await getModelInfo({ fresh: true });
-  if (!info.ready) throw new Error(`Model service at ${config.modelApiUrl} is not ready (${info.reason}). Nothing was loaded.`);
-  console.log(`Model: ${info.version}`);
+  // Readings are only ever evaluated by the model service; case history needs no model.
+  if (!flag('--no-readings')) {
+    const info = await getModelInfo({ fresh: true });
+    if (!info.ready) throw new Error(`Model service at ${config.modelApiUrl} is not ready (${info.reason}). Nothing was loaded.`);
+    console.log(`Model: ${info.version}`);
+  }
   const devices = await prisma.device.findMany({
     where: { provenance: 'SIMULATED', status: 'ACTIVE', site: { active: true } },
-    include: { site: { include: { locality: true } } },
+    include: { site: { include: { locality: true, project: true } } },
     orderBy: { deviceId: 'asc' },
   });
   if (devices.length === 0) throw new Error('No simulated devices found. Run `npm run db:seed` first.');
-  await backfill(devices);
+  if (!flag('--no-readings')) await backfill(devices);
   if (!flag('--no-complaints')) await demoComplaints(devices.map((d) => d.site));
 }
 

@@ -10,14 +10,15 @@ function AuthShell({ title, children, footer }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4">
       <header className="flex h-14 items-center justify-between">
-        <Logo />
+        <Link to="/" aria-label={t('nav.map')}><Logo /></Link>
         <LanguageToggle />
       </header>
       <main className="grid flex-1 items-center gap-10 py-8 md:grid-cols-[1fr_24rem]">
         <div className="max-w-md">
           <h1 className="text-3xl leading-tight font-semibold tracking-tight md:text-4xl">{t('app.tagline')}</h1>
           <p className="mt-4 text-base text-ink-2">{t('auth.intro')}</p>
-          <p className="mt-6 text-[0.875rem] text-ink-2">{t('verdict.disclaimer')}</p>
+          <p className="mt-6 text-[0.875rem] text-ink-2">{t('common.pilotStrip')}</p>
+          <p className="mt-3 text-[0.9375rem]"><Link to="/" className="font-medium text-accent underline">{t('auth.backToMap')}</Link></p>
         </div>
         <div className="rounded-(--radius-card) border border-line bg-surface p-5 shadow-(--shadow-card) sm:p-6">
           <h2 className="text-lg font-semibold">{title}</h2>

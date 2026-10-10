@@ -10,7 +10,7 @@ const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 
 // Rough, illustrative PM10 levels. Not derived from any monitoring record.
-const BACKGROUND_MEAN = { 'MUM-AND': 118, 'MUM-BAN': 96, 'MUM-POW': 88, 'MUM-KUR': 132 };
+const BACKGROUND_MEAN = { 'MUM-KE': 118, 'MUM-HE': 96, 'MUM-S': 88, 'MUM-L': 132 };
 
 export function rng(seedText) {
   const text = `${config.simulator.seed}|${seedText}`;

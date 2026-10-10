@@ -40,4 +40,4 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
-export const homeFor = (user) => (user?.role === 'MUNICIPAL' ? '/municipal' : '/citizen');
+export const homeFor = (user) => (user?.role === 'MUNICIPAL' ? '/municipal' : '/');

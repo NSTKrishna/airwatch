@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CircleCheck, MapPin, Paperclip, Upload } from 'lucide-react';
+import { ArrowLeft, CircleCheck, Eye, EyeOff, MapPin, Paperclip, Upload } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { fmtDateTime } from '../../lib/format.js';
+import { DemoTag, Sources, WardOffice } from '../../components/civic.jsx';
 import { ReadingComparison } from '../../components/Reading.jsx';
 import SiteMap from '../../components/SiteMap.jsx';
 import { AuthImage, Button, FormField, LoadError, Notice, Panel, SourceTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
@@ -17,7 +18,46 @@ const AUDIT_TEXT = {
   NOTE_ADDED: () => 'added an inspection note',
   EVIDENCE_UPLOADED: (e) => `uploaded ${e.metadata?.files?.length || 1} evidence image${(e.metadata?.files?.length || 1) === 1 ? '' : 's'}`,
   FINDINGS_UPDATED: () => 'updated the draft findings',
+  VISIBILITY_CHANGED: (e) => (e.metadata?.hidden ? 'hid the report from the public map' : 'returned the report to the public map'),
 };
+
+// Moderation of the public map: separate from the case status, and always with a reason.
+function Visibility({ complaint, run, busy }) {
+  const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const path = `/municipal/complaints/${complaint.id}/visibility`;
+  if (complaint.publicHidden) {
+    return (
+      <div className="space-y-3 text-[0.875rem]">
+        <p className="flex items-start gap-2 font-medium"><EyeOff className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden />Hidden from the public map</p>
+        <p className="rounded-lg bg-paper px-3 py-2 text-ink-2">{complaint.hiddenReason}</p>
+        <Button variant="secondary" size="sm" icon={Eye} loading={busy === 'visibility'} onClick={() => run('visibility', () => api.post(path, { hidden: false }))}>Show on public map</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3 text-[0.875rem]">
+      <p className="flex items-start gap-2 font-medium"><Eye className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden />Shown on the public map</p>
+      <p className="text-ink-2">
+        {complaint.status === 'SUBMITTED'
+          ? 'The public sees the pin and status only. The description and photographs are published once you start the review.'
+          : 'The public sees the status history, the description, the citizen\'s photographs and, once closed, the outcome. Never the citizen, officers or notes.'}
+      </p>
+      {open ? (
+        <>
+          <FormField label="Reason for hiding" htmlFor="hide-reason" hint="Kept in the audit history. Use for abuse, personal data or off-topic content.">
+            <textarea id="hide-reason" rows={2} className="field resize-y" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </FormField>
+          <div className="flex gap-2">
+            <Button variant="danger" size="sm" icon={EyeOff} disabled={!reason.trim()} loading={busy === 'visibility'}
+              onClick={() => run('visibility', () => api.post(path, { hidden: true, reason }))}>Hide report</Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </>
+      ) : <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Hide from public map…</Button>}
+    </div>
+  );
+}
 
 function SensorEvidence({ complaint }) {
   const anomaly = complaint.anomalyEvidence;
@@ -111,7 +151,7 @@ function Actions({ complaint, allowed, officers, run, busy }) {
           <FormField label="Inspection findings" htmlFor="findings">
             <textarea id="findings" rows={4} className="field resize-y" value={findings} onChange={(e) => setFindings(e.target.value)} placeholder="What the inspection found on site" />
           </FormField>
-          <FormField label="Corrective action" htmlFor="corrective" hint="Shown to the citizen once the complaint is resolved.">
+          <FormField label="Corrective action" htmlFor="corrective" hint="Published with the findings on the public map once the complaint is resolved.">
             <textarea id="corrective" rows={3} className="field resize-y" value={action} onChange={(e) => setAction(e.target.value)} placeholder="What was ordered or done, and any follow-up date" />
           </FormField>
           <div className="flex flex-wrap gap-2">
@@ -126,7 +166,7 @@ function Actions({ complaint, allowed, officers, run, busy }) {
         <div className="border-t border-line pt-4">
           {rejecting ? (
             <div className="space-y-3">
-              <FormField label="Reason for rejection" htmlFor="reject-reason" hint="Shown to the citizen.">
+              <FormField label="Reason for rejection" htmlFor="reject-reason" hint="Shown to the citizen and on the public map.">
                 <textarea id="reject-reason" rows={3} className="field resize-y" value={reason} onChange={(e) => setReason(e.target.value)} />
               </FormField>
               <div className="flex gap-2">
@@ -203,10 +243,13 @@ export default function CaseFile() {
       {back}
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight">{c.site?.name || c.locationText || 'Unlisted site'}</h1>
-          <p className="num mt-1 text-[0.875rem] text-ink-2">{c.reference} · {c.locality.name}{c.site ? ` · ${c.site.code}` : ''} · filed {fmtDateTime(c.createdAt)}</p>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight">{c.project?.name || c.site?.name || c.locationText || 'Unlisted site'}</h1>
+          <p className="num mt-1 text-[0.875rem] text-ink-2">{c.reference} · {c.ward ? `${c.ward.name} ward` : c.locality.name}{c.site ? ` · ${c.site.code}` : ''} · filed {fmtDateTime(c.createdAt)}</p>
         </div>
-        <StatusPill status={c.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {c.isDemo ? <DemoTag>Demo history</DemoTag> : null}
+          <StatusPill status={c.status} />
+        </div>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
@@ -235,6 +278,28 @@ export default function CaseFile() {
                   sites={[{ id: c.id, name: c.site?.name || 'Reported location', latitude: c.latitude, longitude: c.longitude, verdict: c.hasAnomalyEvidence ? 'flagged' : 'none' }]} />
               </div>
             ) : null}
+          </Panel>
+
+          <Panel className="p-4 sm:p-5">
+            <h2 className="font-semibold">Routing</h2>
+            <div className="mt-3 grid gap-5 sm:grid-cols-2">
+              <div>
+                <h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">Responsible ward office</h3>
+                {c.wardOffice ? <WardOffice office={c.wardOffice} /> : <p className="text-[0.875rem] text-ink-2">Filed before ward routing existed; no ward is recorded.</p>}
+              </div>
+              <div>
+                <h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">Project named</h3>
+                {c.projectRecord ? (
+                  <div className="space-y-1.5 text-[0.875rem]">
+                    <p className="font-medium">{c.projectRecord.name}</p>
+                    <p className="text-ink-2">{[c.projectRecord.developer, c.projectRecord.authority, c.projectRecord.registrationNo].filter(Boolean).join(' · ')}</p>
+                    {c.projectRecord.address ? <p className="text-ink-2">{c.projectRecord.address}</p> : null}
+                    <Sources urls={c.projectRecord.sourceUrls} verifiedOn={c.projectRecord.verifiedOn} />
+                  </div>
+                ) : <p className="text-[0.875rem] text-ink-2">The citizen did not name a listed project. Routed by the reported location.</p>}
+              </div>
+            </div>
+            <p className="mt-4 text-[0.8125rem] text-ink-2">Routing happens inside this demonstration. Nothing is sent to BMC, and an action recorded here is not a BMC acknowledgment.</p>
           </Panel>
 
           <Panel className="p-4 sm:p-5">
@@ -302,6 +367,11 @@ export default function CaseFile() {
               </dl>
             ) : null}
             <Actions key={`${c.status}-${c.updatedAt}`} complaint={c} allowed={data.allowedTransitions} officers={officers.data?.officers || []} run={run} busy={busy} />
+          </Panel>
+
+          <Panel className="p-4">
+            <h2 className="mb-3 font-semibold">Public map</h2>
+            <Visibility key={String(c.publicHidden)} complaint={c} run={run} busy={busy} />
           </Panel>
 
           <Panel className="p-4">

@@ -6,7 +6,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { imageUpload, toAttachmentRows } from '../lib/uploads.js';
 import { requireRole } from '../middleware/auth.js';
 import { parse } from '../middleware/validate.js';
-import { captureSiteEvidence } from '../services/complaints.js';
+import { captureSiteEvidence, routeComplaint } from '../services/complaints.js';
 import { complaintCitizenView, complaintDetailInclude } from '../services/views.js';
 
 const router = Router();
@@ -14,9 +14,15 @@ const router = Router();
 const optionalNumber = (min, max) =>
   z.preprocess((v) => (v === '' || v == null ? undefined : Number(v)), z.number().min(min).max(max).optional());
 
+const optionalText = z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(64).optional());
+
+// Construction dust is the only kind of report this pilot takes, so there is no category field.
 const createSchema = z.object({
-  localityCode: z.string().trim().min(1, 'Choose a locality'),
-  siteId: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  // Where the report belongs. One of: a verified project, a monitored site, coordinates, or a ward.
+  projectCode: optionalText,
+  siteId: optionalText,
+  wardSlug: optionalText,
+  localityCode: optionalText,
   description: z.string().trim().min(10, 'Describe what you saw in at least 10 characters').max(2000),
   locationText: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(300).optional()),
   latitude: optionalNumber(-90, 90),
@@ -25,7 +31,7 @@ const createSchema = z.object({
   if ((v.latitude === undefined) !== (v.longitude === undefined)) {
     ctx.addIssue({ code: 'custom', path: ['latitude'], message: 'Provide both latitude and longitude' });
   }
-  if (!v.siteId && v.latitude === undefined && !v.locationText) {
+  if (!v.projectCode && !v.siteId && v.latitude === undefined && !v.locationText) {
     ctx.addIssue({ code: 'custom', path: ['locationText'], message: 'Choose a site, share your location, or describe where this is' });
   }
 });
@@ -34,13 +40,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
   const input = parse(createSchema, req.body);
   if (!req.files?.length) throw badRequest('Some fields are invalid', { fields: { photos: 'Attach at least one photograph' } });
 
-  const locality = await prisma.locality.findUnique({ where: { code: input.localityCode } });
-  if (!locality) throw badRequest('Some fields are invalid', { fields: { localityCode: 'Unknown locality' } });
-  let site = null;
-  if (input.siteId) {
-    site = await prisma.site.findFirst({ where: { id: input.siteId, localityId: locality.id } });
-    if (!site) throw badRequest('Some fields are invalid', { fields: { siteId: 'This site is not in the selected locality' } });
-  }
+  const { project, site, ward, locality } = await routeComplaint(input);
 
   // Evidence is attached when it exists; its absence never blocks a report.
   const evidence = await captureSiteEvidence(site?.id);
@@ -49,11 +49,13 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
       data: {
         citizenId: req.user.id,
         localityId: locality.id,
+        wardId: ward?.id ?? null,
+        projectId: project?.id ?? null,
         siteId: site?.id ?? null,
         description: input.description,
         locationText: input.locationText ?? null,
-        latitude: input.latitude ?? site?.latitude ?? null,
-        longitude: input.longitude ?? site?.longitude ?? null,
+        latitude: input.latitude ?? site?.latitude ?? project?.latitude ?? null,
+        longitude: input.longitude ?? site?.longitude ?? project?.longitude ?? null,
         anomalyEvaluationId: evidence.anomalyEvaluationId,
         sensorSnapshot: evidence.sensorSnapshot ?? undefined,
       },
@@ -64,7 +66,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
     await tx.complaintEvent.create({
       data: {
         complaintId: created.id, actorId: req.user.id, type: 'SUBMITTED', toStatus: 'SUBMITTED',
-        metadata: { anomalyEvidenceAttached: Boolean(evidence.anomalyEvaluationId), photos: req.files.length },
+        metadata: { anomalyEvidenceAttached: Boolean(evidence.anomalyEvaluationId), photos: req.files.length, routedToWard: ward?.code ?? null },
       },
     });
     return created;
@@ -77,7 +79,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
 router.get('/', requireRole('CITIZEN'), async (req, res) => {
   const complaints = await prisma.complaint.findMany({
     where: { citizenId: req.user.id },
-    include: { locality: true, site: true },
+    include: { locality: true, site: true, ward: true, project: true },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ complaints: complaints.map((c) => complaintCitizenView(c)) });

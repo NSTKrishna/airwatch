@@ -7,7 +7,7 @@ import { Button, EmptyState, LoadError, Panel, Skeleton, StatusPill } from '../.
 
 const STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'INSPECTION_ASSIGNED', 'RESOLVED', 'REJECTED'];
 const STATUS_LABEL = { SUBMITTED: 'Submitted', UNDER_REVIEW: 'Under review', INSPECTION_ASSIGNED: 'Inspection assigned', RESOLVED: 'Resolved', REJECTED: 'Rejected' };
-const FILTER_KEYS = ['q', 'status', 'locality', 'assignee', 'anomaly'];
+const FILTER_KEYS = ['q', 'status', 'ward', 'locality', 'assignee', 'anomaly'];
 const PAGE_SIZE = 20;
 
 function Select({ label, value, onChange, children }) {
@@ -22,7 +22,8 @@ function Select({ label, value, onChange, children }) {
 export default function Inbox() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(params.get('q') || '');
-  const localities = useApi('/localities');
+  const overview = useApi('/public/overview');
+  const wards = (overview.data?.wards || []).filter((w) => w.pilot);
   const officers = useApi('/municipal/officers');
 
   useEffect(() => { document.title = 'Complaints · AirWatch'; }, []);
@@ -66,17 +67,17 @@ export default function Inbox() {
           <span className="mb-1 block text-[0.75rem] font-medium text-ink-2">Search</span>
           <span className="relative block">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" aria-hidden />
-            <input type="search" className="field h-10 py-0 pl-9 text-[0.875rem]" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Reference, site, citizen or description" />
+            <input type="search" className="field h-10 py-0! pl-9! text-[0.875rem]" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Reference, project, citizen or description" />
           </span>
         </label>
         <Select label="Status" value={params.get('status') || ''} onChange={(v) => setFilter('status', v)}>
           <option value="">Any status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </Select>
-        <Select label="Locality" value={params.get('locality') || ''} onChange={(v) => setFilter('locality', v)}>
-          <option value="">All localities</option>
-          {(localities.data?.localities || []).map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+        <Select label="Ward" value={params.get('ward') || ''} onChange={(v) => setFilter('ward', v)}>
+          <option value="">All wards</option>
+          {wards.map((w) => <option key={w.slug} value={w.slug}>{w.name}</option>)}
         </Select>
         <Select label="Assigned to" value={params.get('assignee') || ''} onChange={(v) => setFilter('assignee', v)}>
           <option value="">Anyone</option>
@@ -107,7 +108,7 @@ export default function Inbox() {
                   <table className="w-full min-w-[46rem] text-left text-[0.875rem]">
                     <thead className="border-b border-line bg-paper text-[0.75rem] text-ink-2">
                       <tr>
-                        {['Reference', 'Site and locality', 'Reported by', 'Evidence', 'Assigned to', 'Status', 'Filed'].map((h) => (
+                        {['Reference', 'Project and ward', 'Reported by', 'Evidence', 'Assigned to', 'Status', 'Filed'].map((h) => (
                           <th key={h} scope="col" className="px-4 py-2.5 font-medium whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -119,8 +120,10 @@ export default function Inbox() {
                             <Link to={`/municipal/complaints/${c.id}`} className="num font-medium text-accent underline">{c.reference}</Link>
                           </td>
                           <td className="max-w-64 px-4 py-3">
-                            <p className="truncate font-medium">{c.site?.name || c.locationText || 'Unlisted site'}</p>
-                            <p className="truncate text-[0.8125rem] text-ink-2">{c.locality.name}{c.site ? ` · ${c.site.code}` : ''}</p>
+                            <p className="truncate font-medium">{c.project?.name || c.site?.name || c.locationText || 'Unlisted site'}</p>
+                            <p className="truncate text-[0.8125rem] text-ink-2">
+                              {c.ward ? `${c.ward.name} ward` : c.locality.name}{c.site ? ` · ${c.site.code}` : ''}{c.isDemo ? ' · demo history' : ''}{c.publicHidden ? ' · hidden from public map' : ''}
+                            </p>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">{c.citizen.name}</td>
                           <td className="px-4 py-3 whitespace-nowrap">

@@ -15,20 +15,23 @@ before(async () => {
 });
 after(() => stack?.close());
 
-test('Mumbai reference data: eight simulated sites, repeatable seed', async () => {
+test('Mumbai reference data: verified projects with DEMO monitors, repeatable seed', async () => {
+  const projects = await prisma.project.count({ where: { latitude: { not: null }, coordinatePrecision: { in: ['site', 'street'] } } });
   const check = async () => {
     const { body } = await api('GET', '/localities', { token: tokens.citizen });
     assert.equal(body.city, 'Mumbai');
-    assert.deepEqual(body.localities.map((l) => l.name), ['Andheri', 'Bandra', 'Kurla', 'Powai']);
-    assert.ok(body.localities.every((l) => l.city === 'Mumbai' && l.siteCount === 2));
+    assert.deepEqual(body.localities.map((l) => l.code).sort(), [...stack.localityCodes].sort());
+    assert.ok(body.localities.every((l) => l.city === 'Mumbai' && l.siteCount >= 1));
     // Map defaults sit on Mumbai, not Delhi.
     assert.ok(Math.abs(body.mapDefault.latitude - 19.08) < 0.1 && Math.abs(body.mapDefault.longitude - 72.88) < 0.1);
     const { sites } = (await api('GET', '/sites', { token: tokens.citizen })).body;
-    assert.equal(sites.length, 8);
+    assert.equal(sites.length, projects);
     for (const s of sites) {
-      assert.equal(s.simulated, true);
-      assert.match(s.name, /Demo Site/);
+      // The place is a real project; the device and its background station are simulated.
+      assert.equal(s.simulated, false);
+      assert.ok(s.project.code && s.project.ward.code);
       assert.equal(s.device.provenance, 'SIMULATED');
+      assert.match(s.device.deviceId, /^DEMO-/);
       assert.equal(s.station.simulated, true);
       assert.ok(s.latitude > 18.9 && s.latitude < 19.3 && s.longitude > 72.75 && s.longitude < 73.0, `${s.code} is in Mumbai`);
       assert.ok(s.distanceToBackgroundM >= 240 && s.distanceToBackgroundM <= 410);
@@ -37,8 +40,8 @@ test('Mumbai reference data: eight simulated sites, repeatable seed', async () =
   await check();
   stack.seed(); // running the seed again changes nothing
   await check();
-  assert.equal(await prisma.device.count(), 8);
-  assert.equal(await prisma.site.count(), 8);
+  assert.equal(await prisma.device.count(), projects);
+  assert.equal(await prisma.site.count(), projects);
   // Credentials are stored as hashes only.
   const device = await prisma.device.findFirst();
   assert.match(device.tokenHash, /^[0-9a-f]{64}$/);
@@ -46,7 +49,7 @@ test('Mumbai reference data: eight simulated sites, repeatable seed', async () =
 });
 
 test('device registration is municipal-only and returns the token once', async () => {
-  const site = stack.sites['MUM-POW-02'];
+  const site = stack.siteIn(3, 0);
   const body = { deviceId: 'VENDOR-TEST-01', siteId: site.id, manufacturer: 'Test Instruments', model: 'TI-PM', ownerName: 'Test contractor', calibratedAt: '2026-09-01' };
   assert.equal((await api('POST', '/municipal/devices', { token: tokens.citizen, json: body })).status, 403);
   assert.equal((await api('POST', '/municipal/devices', { json: body })).status, 401);
@@ -66,7 +69,7 @@ test('device registration is municipal-only and returns the token once', async (
   assert.equal((await prisma.device.findFirst({ where: { siteId: site.id, provenance: 'SIMULATED' } })).status, 'DISABLED');
   assert.equal((await api('POST', '/municipal/devices', { token: tokens.officer, json: body })).status, 400);
   const list = await api('GET', '/municipal/devices', { token: tokens.officer });
-  assert.equal(list.body.devices.length, 9);
+  assert.equal(list.body.devices.length, stack.sites.length + 1);
   assert.equal(JSON.stringify(list.body).includes('tokenHash'), false);
 });
 
@@ -75,7 +78,7 @@ test('ingestion requires a valid device credential', async () => {
   assert.equal((await send(null, body)).status, 401);
   assert.equal((await send('awd_not-a-real-token', body)).status, 401);
   assert.equal((await send(tokens.officer, body)).status, 401); // a user session is not a device credential
-  const mismatch = await send(real.token, { ...body, device_id: 'MUM-DEMO-001' });
+  const mismatch = await send(real.token, { ...body, device_id: stack.siteIn(0, 0).devices[0].deviceId });
   assert.equal(mismatch.status, 403);
   await api('PATCH', `/municipal/devices/${real.id}`, { token: tokens.officer, json: { status: 'DISABLED' } });
   assert.equal((await send(real.token, body)).status, 403);
@@ -112,8 +115,8 @@ test('a real reading is stored raw, with PM2.5, and is not evaluated against sim
 });
 
 test('publication permission controls what citizens see', async () => {
-  const forCitizen = async () => (await api('GET', '/localities/MUM-POW', { token: tokens.citizen })).body.sites.find((s) => s.code === 'MUM-POW-02');
-  const forOfficer = (await api('GET', '/municipal/flagged-sites', { token: tokens.officer })).body.sites.find((s) => s.code === 'MUM-POW-02');
+  const forCitizen = async () => (await api('GET', `/localities/${stack.siteIn(3, 0).locality.code}`, { token: tokens.citizen })).body.sites.find((s) => s.id === real.siteId);
+  const forOfficer = (await api('GET', '/municipal/flagged-sites', { token: tokens.officer })).body.sites.find((s) => s.id === real.siteId);
   assert.equal(forOfficer.latest.dataSource, 'DEVICE');
   assert.equal(forOfficer.latest.simulated, false);
   assert.equal(forOfficer.latest.site.pm25Ugm3, 58.4);
@@ -187,7 +190,7 @@ test('timestamp, unit and value problems are reported per reading', async () => 
 });
 
 test('the simulator uploads a 15-minute batch through the same API, and retries are idempotent', async () => {
-  const site = stack.sites['MUM-AND-01'];
+  const site = stack.siteIn(0, 0);
   const at = new Date(Date.now() - 20 * 60_000);
   const calls = model.state.predictCalls.length;
   const [first] = await stack.simulator.publishSimulatedReadings({ siteIds: [site.id], minutes: 15, at });
@@ -222,18 +225,18 @@ test('the simulator uploads a 15-minute batch through the same API, and retries 
 });
 
 test('simulated telemetry is deterministic for a given seed', async () => {
-  const site = stack.sites['MUM-BAN-01'];
+  const site = stack.siteIn(1, 0);
   const at = new Date('2026-10-09T06:30:00Z');
-  const one = stack.simulator.simulateReading({ site, localityCode: 'MUM-BAN', at });
-  assert.deepEqual(one, stack.simulator.simulateReading({ site, localityCode: 'MUM-BAN', at }));
+  const one = stack.simulator.simulateReading({ site, localityCode: site.locality.code, at });
+  assert.deepEqual(one, stack.simulator.simulateReading({ site, localityCode: site.locality.code, at }));
   assert.deepEqual(Object.keys(one), ['timestamp', 'interval_seconds', 'pm25', 'pm10', 'temperature_c', 'humidity_pct', 'unit', 'status']);
-  const dust = stack.simulator.simulateReading({ site, localityCode: 'MUM-BAN', at, scenario: 'DUST_EVENT' });
+  const dust = stack.simulator.simulateReading({ site, localityCode: site.locality.code, at, scenario: 'DUST_EVENT' });
   assert.ok(dust.pm10 - one.pm10 >= 70);
-  assert.equal(stack.simulator.simulateReading({ site, localityCode: 'MUM-BAN', at, scenario: 'CONNECTIVITY_FAILURE' }), null);
+  assert.equal(stack.simulator.simulateReading({ site, localityCode: site.locality.code, at, scenario: 'CONNECTIVITY_FAILURE' }), null);
 });
 
 test('a longer averaging period is stored but not sent to the instantaneous model', async () => {
-  const site = stack.sites['MUM-BAN-02'];
+  const site = stack.siteIn(1, 1);
   const deviceId = site.devices[0].deviceId;
   const calls = model.state.predictCalls.length;
   const response = await send(stack.simulator.simulatedDeviceToken(deviceId), { device_id: deviceId, readings: [reading({ timestamp: iso(-60), interval_seconds: 900 })] });
@@ -245,10 +248,10 @@ test('a longer averaging period is stored but not sent to the instantaneous mode
 });
 
 test('model failures keep the reading and record the right status', async () => {
-  const site = stack.sites['MUM-KUR-02'];
+  const site = stack.siteIn(2, 1);
   const deviceId = site.devices[0].deviceId;
   const token = stack.simulator.simulatedDeviceToken(deviceId);
-  const post = (offset) => send(token, { device_id: deviceId, readings: [stack.simulator.simulateReading({ site, localityCode: 'MUM-KUR', at: new Date(Date.now() - offset * 60_000) })] });
+  const post = (offset) => send(token, { device_id: deviceId, readings: [stack.simulator.simulateReading({ site, localityCode: site.locality.code, at: new Date(Date.now() - offset * 60_000) })] });
 
   model.state.ready = false;
   await stack.resetModelCache();
@@ -271,6 +274,6 @@ test('system status states the model scope and the simulated sources', async () 
   assert.match(body.model.limitations, /synthetic Delhi data/);
   assert.match(body.model.scope, /does not forecast AQI/);
   assert.equal(body.sensors.background.provenance, 'SIMULATED');
-  assert.deepEqual(body.sensors.devices, { simulated: 7, real: 1 });
+  assert.deepEqual(body.sensors.devices, { simulated: stack.sites.length - 1, real: 1 });
   assert.equal(body.sensors.simulated, false);
 });

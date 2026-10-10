@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Skeleton } from './ui.jsx';
-import { ChartNoAxesCombined, CircleCheck, CircleDashed, FlaskConical, Inbox, LayoutDashboard, RadioTower, SlidersHorizontal } from 'lucide-react';
+import { ChartNoAxesCombined, CircleCheck, CircleDashed, FlaskConical, Inbox, LayoutDashboard, Map as MapIcon, RadioTower, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../lib/auth.jsx';
 import { useI18n } from '../lib/i18n.jsx';
 import { useApi } from '../lib/useApi.js';
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/municipal/analytics', label: 'Analytics', icon: ChartNoAxesCombined },
   { to: '/municipal/devices', label: 'Devices', icon: RadioTower },
   { to: '/municipal/simulator', label: 'Sensor simulator', icon: SlidersHorizontal },
+  { to: '/', end: true, label: 'Public map', icon: MapIcon },
 ];
 
 function ModelStatus({ status }) {
@@ -69,7 +70,7 @@ export default function MunicipalLayout() {
       <div className="min-w-0">
         <p className="border-b border-warn-line bg-warn-soft px-4 py-1 text-[0.75rem] text-warn lg:px-8">
           <FlaskConical className="mr-1 inline size-3 -translate-y-px" aria-hidden />
-          Demonstration system, not an official BMC service. {status?.sensors.devices.real ? 'Most monitoring sites are simulated; each reading is labelled with its source.' : 'Monitoring sites, devices and readings are simulated.'}
+          Demonstration system, not an official BMC service. Actions here are demo reviews, not BMC acknowledgments. {status?.sensors.devices.real ? 'Most monitors are simulated; each reading is labelled with its source.' : 'Projects are real public records; monitors and readings are simulated.'}
         </p>
         {status && !status.model.ready ? (
           <p className="border-b border-flag-line bg-flag-soft px-4 py-1.5 text-[0.8125rem] text-flag lg:hidden">

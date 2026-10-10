@@ -1,16 +1,30 @@
 # AirWatch
 
-Construction-site dust monitoring for Mumbai neighbourhoods, with a citizen dashboard and a
-municipal case-management dashboard.
+A construction-dust accountability map for Mumbai: a public citizen map of verified construction
+projects, the ward office responsible for each, simulated dust monitoring, citizen dust reports and
+a municipal case-management dashboard that works each report through to an outcome.
 
-A site monitor reports PM2.5 and PM10. AirWatch compares the site's PM10 with a background reading;
-an existing Random Forest model estimates the normal site-minus-background difference for current
-conditions and adds a calibrated margin. A difference above that dynamic barrier is flagged as an
-**unexpected PM10 excess** for review.
+The pilot covers four BMC administrative wards (K/East, H/East, L and S). Mumbai-wide coverage is
+the next phase; the other wards are already loaded with their boundaries and are switched on by
+adding verified data (see [Reference data](#reference-data)).
 
-> **Demonstration system.** The eight monitoring sites, their devices, the background stations and
-> all readings are simulated. They are not real measurements, real construction projects or real
-> device installations. This is not an official BMC service.
+A monitor reports PM2.5, PM10, temperature and humidity. AirWatch compares the site's PM10 with a
+background reading; an existing Random Forest model estimates the normal site-minus-background
+difference for current conditions and adds a calibrated margin. A difference above that dynamic
+barrier is flagged as an **unexpected PM10 excess** for review.
+
+> **Demonstration system. Two kinds of information, never mixed.**
+>
+> *Real, from cited public records:* the construction projects (name, developer, register number,
+> position), ward boundaries, ward offices and elected representatives. Each carries its source
+> URLs and the date it was checked.
+>
+> *Simulated:* every monitoring device (all are labelled DEMO), the background stations, wind, and
+> all readings. No device is installed at any project, and no project's developer has anything to
+> do with them. The seeded case history is demo history and is labelled as such.
+>
+> This is not an official BMC service. A report is routed to a ward office inside this system only:
+> nothing is sent to BMC, and a status recorded here is not a BMC acknowledgment or action.
 >
 > A flag is evidence for review. It is not proof of a rule violation, of sensor tampering or failure,
 > or that the site caused the dust.
@@ -25,7 +39,8 @@ conditions and adds a calibrated margin. A difference above that dynamic barrier
 | --- | --- |
 | `adaptive-aqi-model/` | The existing FastAPI model service (git submodule, unmodified) |
 | `server/` | Express API, Prisma schema, device ingestion, simulator, pairing, tests |
-| `client/` | React + Vite + Tailwind app |
+| `server/src/data/` | Reference data: pilot wards, verified projects, representatives, ward boundaries |
+| `client/` | React + Vite + Tailwind app: public map, citizen reporting, municipal case desk |
 | `deploy/`, `docker-compose.prod.yml`, `amplify.yml` | AWS deployment files (see `docs/DEPLOY_AWS.md`) |
 
 ## How data flows
@@ -70,6 +85,61 @@ Every evaluation has one of four statuses. Only `EVALUATED` carries a verdict.
 - **Flatline.** Ten identical consecutive readings (`FLATLINE_READINGS`) are treated as a stuck sensor.
 - **Publication.** A device's readings reach the citizen dashboard only if it is allowed to publish.
   Newly registered physical devices are withheld by default.
+
+## The citizen map
+
+The map at `/` needs no account. It reads `GET /api/public/*`, which exposes only what anyone may
+see:
+
+| Endpoint | Returns |
+| --- | --- |
+| `/public/overview` | Wards with counts, model and sensor status, who handles construction dust |
+| `/public/boundaries` | Ward boundaries as GeoJSON |
+| `/public/projects`, `/public/projects/:code` | Verified projects, each with its DEMO monitor and latest reading |
+| `/public/sites/:id/history?hours=` | PM10, PM2.5, background, temperature, humidity and PM10 flags, up to 7 days |
+| `/public/wards/:slug` | Ward office, elected representatives, projects and reports |
+| `/public/reports`, `/public/reports/:reference` | Citizen reports and their public status history |
+| `/public/locate?lat=&lng=` | The ward a point is in and the projects around it |
+
+Filing a report needs a citizen account, and construction dust is the only category. A report is
+routed to a ward by the project it names, else by the citizen's coordinates (point in ward
+boundary), else by the ward the citizen chose. Coordinates outside the pilot wards are refused with
+the reason.
+
+What the public sees of a report:
+
+- **Not yet reviewed:** a pin and its status. The description and photographs are withheld.
+- **Under review onward:** the description, the citizen's photographs and the status history.
+- **Closed:** the inspection findings and corrective action, or the reason for rejection.
+- **Never:** the citizen, any officer, internal notes or inspection photographs. A report that
+  names no project is placed to about 100 m.
+
+A reviewer can take a report off the public map with a reason (`POST
+/api/municipal/complaints/:id/visibility`). That is moderation only: the case and its status are
+untouched, the citizen still sees it, and the change is written to the audit trail.
+
+## Reference data
+
+Everything about real places lives in two files and reaches the database through the seed:
+
+- `server/src/data/pilot.js`: the pilot wards (office, representatives), the verified projects, and
+  who handles construction dust. Every record has `sourceUrls` and `verifiedOn`. A project also
+  says how its position was obtained (`coordinateSource`) and how precise it is
+  (`coordinatePrecision`: `site`, `street` or `locality`).
+- `server/src/data/wardBoundaries.json`: the 24 administrative ward boundaries, built from the
+  source named inside the file by `server/scripts/build-ward-boundaries.js`. The source is
+  DataMeet's Mumbai ward data, licensed CC BY-SA 2.5 India: the map credits it, and the derived
+  file stays under the same licence.
+
+Rules the seed and the tests enforce: a project must lie inside the boundary of the ward it names;
+a DEMO monitor is attached only where the position is known to the street or better; a project
+with no verified position is listed but not mapped. Nothing is estimated to fill a gap.
+
+To extend the pilot to another ward, add the ward (with its sources) and its verified projects to
+`pilot.js` and run `npm --prefix server run db:seed`. The seed creates the monitoring area, a DEMO
+monitor and a simulated background station per project. To replace a DEMO monitor with an
+authorized real one, register the device against the same site (see below); the simulated stand-in
+is switched off automatically.
 
 ## Device API
 
@@ -147,14 +217,18 @@ npm run dev:api     # Express on :4000, with the embedded device simulator
 npm run dev:web     # Vite on :5173
 ```
 
-Optional demo history (a week of simulated readings evaluated by the real model, plus five sample
-complaints): `npm --prefix server run data:load`. It refuses to run if the model is not answering.
+Optional demo history (a week of simulated readings evaluated by the real model, plus labelled demo
+cases at the pilot's projects across every stage of the lifecycle): `npm --prefix server run
+data:load`. The readings need the model to be answering; `-- --no-readings` loads the case history
+alone.
 
 Development logins: `citizen@airwatch.test` / `Citizen@123`, `officer@airwatch.test` / `Officer@123`,
 `inspector@airwatch.test` / `Officer@123`. Public sign-up always creates a citizen.
 
-To see the whole workflow: as the officer open **Sensor simulator**, set a site to "Construction dust
-event", then report that site as the citizen and work the complaint from the municipal inbox.
+To see the whole workflow: open the map signed out and pick a project. As the officer open **Sensor
+simulator** and set that project to "Construction dust event". As the citizen, report dust at the
+project, then work the complaint from the municipal inbox and watch its public page
+(`/report/AW-...`) follow each step.
 
 ## Tests
 
@@ -168,6 +242,7 @@ npm test
 | `pairing.test.js` | Missing/stale background, missing wind, averaging periods, provenance, flatline, domain |
 | `ingestion.test.js` | Mumbai seed, device registration and auth, single and 15-minute batch uploads, duplicates, invalid values, timestamps, publication, PM2.5, model error statuses |
 | `workflow.test.js` | Simulator scenarios, complaint creation with evidence, citizen/municipal permissions, lifecycle and audit trail |
+| `public.test.js` | Public map API, reference-data integrity (sources, projects inside their ward), ward routing, the citizen to case desk to public status loop, what stays private, moderation |
 | `live-model.test.js` | The real FastAPI model against its published smoke test. Skipped if the artifact is not loaded |
 
 The HTTP tests use a labelled **test double** of the model (`test/helpers/modelDouble.js`). It is not
@@ -178,15 +253,24 @@ ready when `NODE_ENV=production`.
 
 `Submitted → Under review → Inspection assigned → Resolved`, with `Rejected` from Under review or
 Inspection assigned. Every change writes an audit event in the same transaction. Complaints and
-evaluations are separate tables; a complaint only references an evaluation as evidence.
+evaluations are separate tables; a complaint only references an evaluation as evidence. Each
+complaint records the ward it was routed to and the project it names, and its status changes are
+the public status history shown on the map.
 
 ## Known limits
 
 - Everything measured is simulated, including background PM10 and wind. With a real device and no
   approved background and wind source, readings are stored and shown but not evaluated.
+- Project and ward facts were checked on the dates stored with them and will go stale: completion
+  dates slip, officers and representatives change. Nothing refreshes them automatically.
+- Elected representatives are listed only where a source confirmed them. They are shown as
+  representatives, not as enforcement authorities.
+- Ward boundaries are simplified open data, not a legal boundary. A report filed within a few
+  metres of a boundary can be routed to the neighbouring ward.
 - The model is the synthetic Delhi demo model. Flags on Mumbai sites demonstrate the mechanism, not accuracy.
-- The earlier Delhi prototype's localities, sites and complaints are kept in the database, inactive.
-  Their complaints still appear in the municipal inbox.
+- Earlier prototypes' localities and fictional demo sites are kept in the database, inactive. Their
+  complaints still appear in the municipal inbox and have no ward.
 - Demo history is evaluated with relabelled timestamps (see `server/scripts/load-demo-data.js`).
-- Citizen screens are in English and Hindi; the Hindi is a first draft, and Marathi is not yet offered.
+- Citizen screens are in English, Hindi and Marathi. The Hindi and Marathi are first drafts that a
+  native speaker has not reviewed. Facts quoted from sources stay in the source's language.
 - Images are stored in PostgreSQL; the session token is kept in `localStorage`.
