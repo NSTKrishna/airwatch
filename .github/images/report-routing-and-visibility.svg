@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 760" width="1300" height="760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><polygon points="0,0 12,5 0,10" fill="#16201e"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1300" height="760" fill="#ffffff"/>
+  <text x="30" y="46" font-size="24" font-weight="700" fill="#16201e">A dust report: where it is routed, and what the public can see at each step</text>
+
+  <!-- Row 1: routing -->
+  <rect x="30" y="80" width="230" height="150" rx="10" fill="#f5f4ef" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="50" y="118" font-size="20" font-weight="700" fill="#16201e">Citizen report</text>
+  <text x="50" y="150" font-size="18" fill="#44504d">photo, description,</text>
+  <text x="50" y="176" font-size="18" fill="#44504d">construction dust</text>
+  <text x="50" y="202" font-size="18" fill="#44504d">only</text>
+
+  <line x1="262" y1="155" x2="326" y2="155" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="294" y="143" font-size="18" text-anchor="middle" fill="#16201e">report</text>
+
+  <rect x="330" y="80" width="640" height="150" rx="10" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="352" y="114" font-size="20" font-weight="700" fill="#084742">Routed to a ward by the first rule that applies</text>
+  <text x="352" y="146" font-size="18" fill="#16201e">1. It names a listed project: that project's ward</text>
+  <text x="352" y="174" font-size="18" fill="#16201e">2. It carries coordinates: the ward whose boundary contains them</text>
+  <text x="352" y="202" font-size="18" fill="#16201e">3. The citizen picked a ward</text>
+
+  <line x1="972" y1="155" x2="1036" y2="155" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1004" y="143" font-size="18" text-anchor="middle" fill="#16201e">ward</text>
+
+  <rect x="1040" y="80" width="230" height="150" rx="10" fill="#f5f4ef" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="1060" y="118" font-size="20" font-weight="700" fill="#16201e">Case desk</text>
+  <text x="1060" y="150" font-size="18" fill="#44504d">inbox, filtered by</text>
+  <text x="1060" y="176" font-size="18" fill="#44504d">ward, with the</text>
+  <text x="1060" y="202" font-size="18" fill="#44504d">ward office shown</text>
+
+  <text x="352" y="262" font-size="18" fill="#b3261e">Coordinates outside the four pilot wards are refused, with the reason.</text>
+
+  <!-- Row 2: lifecycle -->
+  <text x="30" y="318" font-size="20" font-weight="700" fill="#16201e">The case desk moves the case. Every change is written to the audit trail.</text>
+
+  <rect x="30" y="336" width="205" height="70" rx="35" fill="#eceae3" stroke="#5f6a67" stroke-width="2"/>
+  <text x="132" y="378" font-size="18" font-weight="700" text-anchor="middle" fill="#16201e">Submitted</text>
+  <line x1="237" y1="371" x2="371" y2="371" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="304" y="360" font-size="18" text-anchor="middle" fill="#16201e">start</text>
+  <text x="304" y="394" font-size="18" text-anchor="middle" fill="#16201e">review</text>
+
+  <rect x="375" y="336" width="205" height="70" rx="35" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="477" y="378" font-size="18" font-weight="700" text-anchor="middle" fill="#084742">Under review</text>
+  <line x1="582" y1="371" x2="716" y2="371" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="649" y="360" font-size="18" text-anchor="middle" fill="#16201e">assign</text>
+  <text x="649" y="394" font-size="18" text-anchor="middle" fill="#16201e">inspector</text>
+
+  <rect x="720" y="336" width="205" height="70" rx="35" fill="#faf0d7" stroke="#7a5200" stroke-width="2"/>
+  <text x="822" y="378" font-size="18" font-weight="700" text-anchor="middle" fill="#7a5200">Inspection assigned</text>
+  <line x1="927" y1="371" x2="1061" y2="371" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="994" y="360" font-size="18" text-anchor="middle" fill="#16201e">findings</text>
+  <text x="994" y="394" font-size="18" text-anchor="middle" fill="#16201e">or reason</text>
+
+  <rect x="1065" y="336" width="205" height="70" rx="35" fill="#e5f2e9" stroke="#1b6a3d" stroke-width="2"/>
+  <text x="1167" y="378" font-size="18" font-weight="700" text-anchor="middle" fill="#1b6a3d">Resolved or rejected</text>
+
+  <text x="375" y="430" font-size="18" fill="#44504d">A report can also be rejected straight from Under review, with a reason.</text>
+
+  <!-- Row 3: public visibility -->
+  <text x="30" y="466" font-size="20" font-weight="700" fill="#16201e">What anyone can see on the report's public page at that step</text>
+
+  <rect x="30" y="482" width="205" height="122" rx="10" fill="#ffffff" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="48" y="510" font-size="18" fill="#16201e">Pin and status only.</text>
+  <text x="48" y="542" font-size="18" fill="#7a5200">Description and</text>
+  <text x="48" y="568" font-size="18" fill="#7a5200">photos withheld.</text>
+
+  <rect x="375" y="482" width="205" height="122" rx="10" fill="#ffffff" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="393" y="510" font-size="18" fill="#16201e">Description,</text>
+  <text x="393" y="536" font-size="18" fill="#16201e">citizen's photos,</text>
+  <text x="393" y="562" font-size="18" fill="#16201e">status history.</text>
+
+  <rect x="720" y="482" width="205" height="122" rx="10" fill="#ffffff" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="738" y="510" font-size="18" fill="#16201e">The same, with the</text>
+  <text x="738" y="536" font-size="18" fill="#16201e">new status and the</text>
+  <text x="738" y="562" font-size="18" fill="#16201e">time it changed.</text>
+
+  <rect x="1065" y="482" width="205" height="122" rx="10" fill="#ffffff" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="1083" y="510" font-size="18" fill="#16201e">Plus the findings and</text>
+  <text x="1083" y="536" font-size="18" fill="#16201e">corrective action, or</text>
+  <text x="1083" y="562" font-size="18" fill="#16201e">the rejection reason.</text>
+
+  <!-- Always -->
+  <rect x="30" y="632" width="1240" height="100" rx="10" fill="#f5f4ef" stroke="#c4c0b3" stroke-width="2"/>
+  <text x="50" y="664" font-size="18" fill="#16201e"><tspan font-weight="700">Never public:</tspan> the citizen, officers, internal notes, inspection photographs.</text>
+  <text x="50" y="690" font-size="18" fill="#16201e">A report that names no project is placed to about 100 m, not on the spot it was filed from.</text>
+  <text x="50" y="716" font-size="18" fill="#16201e">A reviewer can take a report off the public map with a reason. The case and its status do not change.</text>
+</svg>
