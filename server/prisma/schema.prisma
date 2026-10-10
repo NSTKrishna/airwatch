@@ -58,6 +58,13 @@ enum ComplaintEventType {
   NOTE_ADDED
   EVIDENCE_UPLOADED
   FINDINGS_UPDATED
+  VISIBILITY_CHANGED
+}
+
+enum RepresentativeRole {
+  CORPORATOR
+  MLA
+  MP
 }
 
 model User {
@@ -75,6 +82,83 @@ model User {
   registeredDevices  Device[]
 }
 
+// BMC administrative ward. Reference data: every fact comes from a cited public source
+// (sourceUrls) checked on verifiedOn. Boundaries live in src/data/wardBoundaries.json.
+model Ward {
+  id              String    @id @default(cuid())
+  code            String    @unique // as BMC writes it, for example "K/E"
+  slug            String    @unique // URL-safe, for example "ke"
+  name            String
+  areas           String?
+  // Something a citizen should know about this ward's administration, from a cited source.
+  note            String?
+  // Pilot wards have verified projects, demo monitors and accept citizen reports.
+  pilot           Boolean   @default(false)
+  latitude        Float?
+  longitude       Float?
+  officeAddress   String?
+  officePhone     String?
+  officeEmail     String?
+  officeLatitude  Float?
+  officeLongitude Float?
+  sourceUrls      Json?
+  verifiedOn      DateTime?
+
+  localities      Locality[]
+  representatives Representative[]
+  projects        Project[]
+  complaints      Complaint[]
+}
+
+// Elected representative for an area of a ward. Shown as a representative only:
+// they are not an enforcement authority and receive nothing from this system.
+model Representative {
+  id           String             @id @default(cuid())
+  wardId       String
+  role         RepresentativeRole
+  name         String
+  party        String?
+  constituency String
+  note         String?
+  sourceUrl    String
+  verifiedOn   DateTime
+
+  ward Ward @relation(fields: [wardId], references: [id], onDelete: Cascade)
+
+  @@unique([wardId, role, constituency])
+}
+
+// A real construction project, from public records. Nothing here is measured or simulated.
+model Project {
+  id                  String   @id @default(cuid())
+  code                String   @unique
+  name                String
+  developer           String?
+  category            String
+  authority           String // register or agency the record comes from: MahaRERA, MMRDA, BMC ...
+  registrationNo      String?
+  description         String?
+  address             String?
+  latitude            Float?
+  longitude           Float?
+  coordinateSource    String?
+  coordinatePrecision String? // site | street | locality
+  wardId              String
+  proposedCompletion  String?
+  status              String?
+  statusConfidence    String?
+  sourceUrls          Json
+  verifiedOn          DateTime
+  notes               String?
+  active              Boolean  @default(true)
+
+  ward       Ward        @relation(fields: [wardId], references: [id])
+  site       Site?
+  complaints Complaint[]
+
+  @@index([wardId])
+}
+
 model Locality {
   id        String @id @default(cuid())
   code      String  @unique
@@ -84,7 +168,10 @@ model Locality {
   longitude Float
   // Inactive localities are kept for the complaints that reference them but are not monitored.
   active    Boolean @default(true)
+  // The administrative ward this monitoring area belongs to.
+  wardId    String?
 
+  ward       Ward?       @relation(fields: [wardId], references: [id])
   stations   Station[]
   sites      Site[]
   complaints Complaint[]
@@ -123,7 +210,10 @@ model Site {
   active                Boolean @default(true)
   // Demonstration site: not a real construction project.
   simulated             Boolean @default(true)
+  // The verified project this monitoring point stands at, when there is one.
+  projectId             String? @unique
 
+  project      Project?            @relation(fields: [projectId], references: [id])
   locality     Locality            @relation(fields: [localityId], references: [id])
   station      Station             @relation(fields: [stationId], references: [id])
   observations SensorObservation[]
@@ -368,6 +458,17 @@ model Complaint {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Routing: the ward office responsible for the place, and the project named, if any.
+  wardId       String?
+  projectId    String?
+  // Seeded demonstration history, never a real citizen's report.
+  isDemo       Boolean @default(false)
+  // Moderation: withheld from the public map by an officer, with the reason.
+  publicHidden Boolean @default(false)
+  hiddenReason String?
+
+  ward              Ward?              @relation(fields: [wardId], references: [id])
+  project           Project?           @relation(fields: [projectId], references: [id])
   citizen           User               @relation("ComplaintCitizen", fields: [citizenId], references: [id])
   assignedOfficer   User?              @relation("ComplaintOfficer", fields: [assignedOfficerId], references: [id])
   locality          Locality           @relation(fields: [localityId], references: [id])
@@ -380,6 +481,7 @@ model Complaint {
   @@index([status, createdAt])
   @@index([localityId])
   @@index([siteId])
+  @@index([wardId, status])
 }
 
 model Attachment {

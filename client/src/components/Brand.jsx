@@ -19,11 +19,11 @@ export function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
   return (
     <div role="group" aria-label={t('common.language')} className="inline-flex items-center rounded-lg border border-line-strong bg-surface p-0.5">
-      <Languages className="mx-1.5 size-4 text-ink-3" aria-hidden />
+      <Languages className="mx-1.5 size-4 text-ink-3 max-sm:hidden" aria-hidden />
       {LANGUAGES.map((l) => (
-        <button key={l.code} type="button" lang={l.code} aria-pressed={lang === l.code} onClick={() => setLang(l.code)}
+        <button key={l.code} type="button" lang={l.code} aria-pressed={lang === l.code} aria-label={l.label} title={l.label} onClick={() => setLang(l.code)}
           className={`h-7 rounded-md px-2 text-[0.8125rem] font-medium transition-colors duration-150 ${lang === l.code ? 'bg-accent text-white' : 'text-ink-2 hover:bg-mute-soft'}`}>
-          {l.label}
+          <span className="sm:hidden">{l.short}</span><span className="max-sm:hidden">{l.label}</span>
         </button>
       ))}
     </div>

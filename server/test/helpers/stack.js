@@ -12,7 +12,7 @@ const serverDir = fileURLToPath(new URL('../..', import.meta.url));
 export const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 const TABLES = ['ComplaintEvent', 'Attachment', 'Complaint', 'AnomalyEvaluation', 'SensorObservation', 'DeviceReading', 'IngestionBatch',
-  'BackgroundObservation', 'WeatherObservation', 'Device', 'SimulatorState', 'Site', 'Station', 'Locality', 'User'];
+  'BackgroundObservation', 'WeatherObservation', 'Device', 'SimulatorState', 'Site', 'Station', 'Locality', 'Project', 'Representative', 'Ward', 'User'];
 
 export async function startStack(extraEnv = {}) {
   const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL.replace(/\/airwatch(\?|$)/, '/airwatch_test$1');
@@ -53,10 +53,18 @@ export async function startStack(extraEnv = {}) {
     citizen: await login('citizen@airwatch.test', 'Citizen@123'),
     officer: await login('officer@airwatch.test', 'Officer@123'),
   };
-  const sites = Object.fromEntries((await prisma.site.findMany({ include: { devices: true, locality: true } })).map((s) => [s.code, s]));
+  const sites = await prisma.site.findMany({ include: { devices: true, locality: true, project: true }, orderBy: { code: 'asc' } });
+  // The seeded places come from the pilot's reference data, so tests address them by position:
+  // the n-th monitored project of the w-th pilot ward (both in code order).
+  const localityCodes = [...new Set(sites.map((s) => s.locality.code))];
+  const siteIn = (w, n = 0) => {
+    const site = sites.filter((s) => s.locality.code === localityCodes[w])[n];
+    assert.ok(site, `the pilot data needs a monitored project ${n + 1} in ward ${w + 1}`);
+    return site;
+  };
 
   return {
-    api, model, prisma, tokens, sites, simulator, seed,
+    api, model, prisma, tokens, sites, siteIn, localityCodes, simulator, seed,
     resetModelCache: async () => (await import('../../src/services/modelClient.js')).resetModelInfoCache(),
     async close() {
       server.close();

@@ -7,7 +7,7 @@ import { fmtDate } from '../../lib/format.js';
 import { EmptyState, LoadError, Panel, Skeleton, StatusPill, buttonClass } from '../../components/ui.jsx';
 
 export default function MyComplaints() {
-  const { t, locale, place } = useI18n();
+  const { t, locale } = useI18n();
   const { data, error, loading, reload } = useApi('/complaints', { pollMs: 45_000 });
   useEffect(() => { document.title = `${t('complaints.title')} · AirWatch`; }, [t]);
 
@@ -34,8 +34,8 @@ export default function MyComplaints() {
                   <li key={c.id}>
                     <Link to={`/citizen/complaints/${c.id}`} className="flex items-center gap-3 px-4 py-3.5 transition-colors duration-150 hover:bg-paper">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{c.site?.name || c.locationText || t('complaints.unlistedSite')}</p>
-                        <p className="num mt-0.5 text-[0.8125rem] text-ink-2">{c.reference} · {place(c.locality)} · {t('complaints.filed', { time: fmtDate(c.createdAt, locale) })}</p>
+                        <p className="truncate font-medium">{c.project?.name || c.site?.name || c.locationText || t('complaints.unlistedSite')}</p>
+                        <p className="num mt-0.5 text-[0.8125rem] text-ink-2">{c.reference} · {c.ward ? t('ward.title', { name: c.ward.name }) : c.locality?.name} · {t('complaints.filed', { time: fmtDate(c.createdAt, locale) })}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <StatusPill status={c.status} />
                           {c.hasAnomalyEvidence ? (

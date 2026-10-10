@@ -37,7 +37,7 @@ function SitePopup({ site }) {
   return (
     <div className="min-w-44">
       <p className="font-semibold">{site.name}</p>
-      <p className="text-ink-2">{site.locality.name} · {site.code}{site.simulated ? ' · simulated demo site' : ''}</p>
+      <p className="text-ink-2">{site.locality.name} ward · {site.code} · DEMO monitor at a verified project</p>
       <div className="mt-1.5"><VerdictBadge verdict={site.verdict} /></div>
       {site.latest ? (
         <p className="num mt-1.5">

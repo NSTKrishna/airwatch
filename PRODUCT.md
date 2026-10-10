@@ -12,12 +12,14 @@ React + Vite, Tailwind CSS, React Router, Recharts, React Leaflet; Node.js + Exp
 
 ## Users
 
-- **Citizens** in Mumbai localities (Andheri, Bandra, Kurla, Powai), mostly on phones, often outdoors next to the site they are worried about. They want to know whether dust near them is unusual and to report a site with a photo.
+- **Citizens** in the pilot wards (K/East, H/East, L and S), mostly on phones, often outdoors next to the site they are worried about, and usually not signed in. They want to know who is building near them, which ward office answers for it, whether dust there is unusual, and what happened to a report.
 - **Municipal officers**, desk first with the phone as a usable fallback for inspection notes and evidence in the field. They triage reports, assign inspections, and record findings and corrective action.
 
 ## Product Purpose
 
-AirWatch receives PM2.5 and PM10 from site monitors and compares a site's PM10 with a nearby background reading. An existing Random Forest model estimates the normal difference and adds a calibrated margin; a difference above that dynamic barrier is flagged as an unexpected PM10 excess for review. Citizens can report a site (with or without a flag); officers work each report through to an outcome.
+AirWatch is a public construction-dust accountability map for Mumbai. It shows verified, currently active construction projects taken from public records, the BMC ward office responsible for each place, and the citizen reports filed about them with their full status history. Citizens report construction dust (the only category) with a location, photographs and a description; reviewers work each report through to an outcome on the case desk, and every step shows on the public map.
+
+A DEMO monitor stands at each verified project. It receives PM2.5, PM10, temperature and humidity through the same ingestion API a real device would use, and its PM10 is compared with a background reading. An existing Random Forest model estimates the normal difference and adds a calibrated margin; a difference above that dynamic barrier is flagged as an unexpected PM10 excess for review.
 
 ## Positioning
 
@@ -27,21 +29,26 @@ The barrier adapts to conditions (background level, weather, wind alignment, dis
 
 Complaint lifecycle: Submitted → Under Review → Inspection Assigned → Resolved / Rejected, with an audit entry for every change. Anomaly alerts and citizen complaints are separate records; a complaint may reference an alert as evidence.
 
+Every report is routed to a ward: by the project it names, else by the citizen's coordinates (point in ward boundary), else by the ward the citizen chose. A report nobody has reviewed is public as a pin and a status only; its text and photographs become public when review starts. A reviewer can take a report off the public map, with a reason, without changing the case.
+
 ## Capabilities and Constraints
 
 - A flag is evidence for review. It is never a finding of a violation, of sensor tampering or failure, or of what caused the dust.
 - The model is the synthetic Delhi demo model, not validated for Mumbai. It assesses PM10 only; PM2.5 is stored and shown.
 - Site monitors, background PM10 and wind are separate sources. Missing context is reported, never filled in, and simulated context is never paired with a real device's reading.
-- This is a demonstration, not an official BMC system.
+- This is a demonstration, not an official BMC system. Routing happens inside the pilot: no ward office receives anything, and no status is a BMC acknowledgment or action. The interface says so wherever a status is shown.
+- Project and ward facts are real and each carries its source URLs and the date it was checked. Sensors and readings are simulated. The two are never presented as the same kind of thing.
+- Elected representatives (corporator, MLA, MP) are listed as representatives only. They are not enforcement authorities and receive nothing from the product.
+- Construction dust is the only reporting category in the pilot.
 - No model verdict is shown unless the FastAPI model actually returned one. "No assessment" is a first-class state.
-- All eight sites, their devices and all readings are currently simulated; every reading is labelled with its source (simulated or authenticated device).
+- Every device and every reading is currently simulated; every reading is labelled with its source (simulated or authenticated device). A monitor is only attached to a project whose position is known to the street or better.
 - The trained model and its calibration are not modified by this product.
-- Citizen screens ship in English and Hindi. Hindi copy is a first draft and has not been reviewed by a native speaker (open item). Marathi is not yet offered (open item).
+- Citizen screens ship in English, Hindi and Marathi. The Hindi and Marathi copy is a first draft and has not been reviewed by a native speaker (open item). Facts quoted from sources (project descriptions, office addresses, department names) stay in the language of the source.
 - Municipal screens are English only for now.
 
 ## Evidence on Hand
 
-No real sensor feed, no vendor integration, no real construction-site registry, no real complaints. Site names and positions are fictional demo locations in real Mumbai areas. Do not present any of it as measured or official.
+Real: the pilot's construction projects, ward offices, ward boundaries and elected representatives, each from a cited public source (`server/src/data/pilot.js`, `server/src/data/wardBoundaries.json`). Not real: sensors, readings, background and wind data, and the seeded case history, which is stored and shown as demo history. No vendor integration and no link to any BMC system. Do not present anything simulated as measured, or anything recorded here as official.
 
 ## Product Principles
 
@@ -49,7 +56,8 @@ No real sensor feed, no vendor integration, no real construction-site registry, 
 2. Reporting is never gated on the model.
 3. Every decision leaves a trail.
 4. Simulated is always labelled simulated.
+5. No location, name or office detail is shown without a source. What could not be verified is left out.
 
 ## Accessibility & Inclusion
 
-Citizen flow must work one-handed on a small phone in daylight; status is never conveyed by colour alone; English and Hindi.
+Citizen flow must work one-handed on a small phone in daylight; status is never conveyed by colour alone; English, Hindi and Marathi.

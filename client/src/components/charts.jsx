@@ -8,12 +8,15 @@ import { fmtDateTime, fmtNumber, fmtTime } from '../lib/format.js';
 export const SERIES = {
   background: '#2a78d6',
   site: '#eb6834',
+  pm25: '#1baf7a',
+  temperature: '#b3261e',
+  humidity: '#2a78d6',
   difference: '#4a3aa7',
   barrier: '#44504d',
   flag: '#b3261e',
 };
 // Fixed locality order so a locality keeps its colour regardless of filters.
-export const LOCALITY_COLORS = { 'MUM-AND': '#2a78d6', 'MUM-BAN': '#eb6834', 'MUM-KUR': '#1baf7a', 'MUM-POW': '#eda100' };
+export const LOCALITY_COLORS = { 'MUM-KE': '#2a78d6', 'MUM-HE': '#eb6834', 'MUM-L': '#1baf7a', 'MUM-S': '#eda100' };
 
 const AXIS = { stroke: '#c4c0b3', tick: { fill: '#5f6a67', fontSize: 11 }, tickLine: false };
 const GRID = { stroke: '#e8e5dc', vertical: false };
@@ -38,12 +41,16 @@ function ChartTooltip({ active, payload, label, unit = 'µg/m³', labelFormatter
   );
 }
 
+// Ranges longer than a day need the date on the axis, not just the hour.
+const spansDays = (points) => points.length > 1 && points.at(-1).ts - points[0].ts > 26 * 3_600_000;
+const fmtDay = (value) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
 const timeAxis = (points) => ({
   dataKey: 'ts',
   type: 'number',
   scale: 'time',
   domain: ['dataMin', 'dataMax'],
-  tickFormatter: (v) => fmtTime(v),
+  tickFormatter: (v) => (spansDays(points) ? fmtDay(v) : fmtTime(v)),
   minTickGap: 48,
   ...AXIS,
   hide: points.length === 0,
@@ -85,6 +92,41 @@ export function LevelsChart({ points, labels, height = 220 }) {
         <Legend {...LEGEND} />
         <Line name={labels.background} dataKey="background" stroke={SERIES.background} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
         <Line name={labels.site} dataKey="site" stroke={SERIES.site} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** PM10 and PM2.5 at the monitor against background PM10. */
+export function ParticulateChart({ points, labels, height = 220 }) {
+  const data = withTs(points);
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <CartesianGrid {...GRID} />
+        <XAxis {...timeAxis(data)} />
+        <YAxis {...AXIS} axisLine={false} width={44} />
+        <Tooltip content={<ChartTooltip footer={(p) => (p?.anomalies ? labels.flagged : null)} />} />
+        <Legend {...LEGEND} />
+        <Line name={labels.background} dataKey="background" stroke={SERIES.background} strokeWidth={1.5} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+        <Line name={labels.pm25} dataKey="pm25" stroke={SERIES.pm25} strokeWidth={1.5} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+        <Line name={labels.site} dataKey="site" stroke={SERIES.site} strokeWidth={2} dot={<AnomalyDot />} activeDot={{ r: 4 }} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** One quantity over time (temperature, humidity). */
+export function SingleSeriesChart({ points, dataKey, label, unit, color, height = 130 }) {
+  const data = withTs(points);
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+        <CartesianGrid {...GRID} />
+        <XAxis {...timeAxis(data)} />
+        <YAxis {...AXIS} axisLine={false} width={44} domain={['auto', 'auto']} />
+        <Tooltip content={<ChartTooltip unit={unit} />} />
+        <Line name={label} dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
   );

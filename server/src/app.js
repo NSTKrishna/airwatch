@@ -12,6 +12,7 @@ import complaintRoutes, { attachmentsRouter } from './routes/complaints.js';
 import deviceRoutes from './routes/devices.js';
 import monitoringRoutes from './routes/monitoring.js';
 import municipalRoutes from './routes/municipal.js';
+import publicRoutes from './routes/public.js';
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,9 @@ export function createApp() {
     return res.json({ status: 'ok', database: true, modelReady: model.ready });
   });
   app.use('/api/auth', authRoutes);
+
+  // The citizen map is readable without an account.
+  app.use('/api/public', publicRoutes);
 
   // Device ingestion authenticates with device tokens, not user sessions.
   app.use('/api/v1/devices', deviceRoutes);

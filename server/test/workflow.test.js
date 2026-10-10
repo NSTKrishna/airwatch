@@ -41,9 +41,9 @@ test('no verdict is produced while the model is unavailable', async () => {
   model.state.ready = false;
   await stack.resetModelCache();
   const sweep = await api('POST', '/municipal/monitoring/run', { token: tokens.officer });
-  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: 8 });
+  assert.deepEqual(sweep.body.counts, { MODEL_UNAVAILABLE: stack.sites.length });
   const rows = await prisma.anomalyEvaluation.findMany();
-  assert.equal(rows.length, 8);
+  assert.equal(rows.length, stack.sites.length);
   for (const row of rows) {
     assert.equal(row.isAnomaly, null);
     assert.equal(row.dynamicBarrier, null);
@@ -51,7 +51,7 @@ test('no verdict is produced while the model is unavailable', async () => {
   }
   const summary = await api('GET', '/municipal/summary', { token: tokens.officer });
   assert.equal(summary.body.activeAnomalies, 0);
-  assert.equal(summary.body.sitesWithoutAssessment, 8);
+  assert.equal(summary.body.sitesWithoutAssessment, stack.sites.length);
   const status = await api('GET', '/system/status', { token: tokens.citizen });
   assert.equal(status.body.model.ready, false);
   assert.equal(status.body.sensors.simulated, true);
@@ -61,13 +61,13 @@ test('no verdict is produced while the model is unavailable', async () => {
 
 test('a simulated dust event is flagged and stored with sensor values and model version', async () => {
   const sim = await api('GET', '/municipal/simulator', { token: tokens.officer });
-  ctx.dusty = sim.body.sites.find((s) => s.code === 'MUM-AND-01');
-  ctx.calm = sim.body.sites.find((s) => s.code === 'MUM-BAN-01');
+  ctx.dusty = sim.body.sites.find((s) => s.id === stack.siteIn(0, 0).id);
+  ctx.calm = sim.body.sites.find((s) => s.id === stack.siteIn(1, 0).id);
   const set = await api('PUT', `/municipal/simulator/sites/${ctx.dusty.id}`, { token: tokens.officer, json: { scenario: 'DUST_EVENT' } });
   assert.equal(set.body.isAnomaly, true);
   await api('POST', '/municipal/monitoring/run', { token: tokens.officer });
 
-  const locality = await api('GET', '/localities/MUM-AND', { token: tokens.citizen });
+  const locality = await api('GET', `/localities/${stack.localityCodes[0]}`, { token: tokens.citizen });
   const site = locality.body.sites.find((s) => s.id === ctx.dusty.id);
   const e = site.latest.evaluation;
   assert.equal(site.latest.simulated, true);
@@ -80,14 +80,14 @@ test('a simulated dust event is flagged and stored with sensor values and model 
   assert.ok(e.siteTimestamp && e.backgroundTimestamp);
 
   const flagged = await api('GET', '/municipal/flagged-sites', { token: tokens.officer });
-  assert.deepEqual(flagged.body.sites.filter((s) => s.flagged).map((s) => s.code), ['MUM-AND-01']);
+  assert.deepEqual(flagged.body.sites.filter((s) => s.flagged).map((s) => s.code), [ctx.dusty.code]);
   const history = await api('GET', `/sites/${ctx.dusty.id}/history?hours=1`, { token: tokens.citizen });
   assert.ok(history.body.points.some((p) => p.anomalies > 0));
 });
 
 test('device and context problems are reported as such and never reach the model', async () => {
   const sim = (await api('GET', '/municipal/simulator', { token: tokens.officer })).body;
-  const kurla = sim.sites.find((s) => s.code === 'MUM-KUR-01');
+  const kurla = sim.sites.find((s) => s.id === stack.siteIn(2, 0).id);
   assert.deepEqual(sim.scenarios.map((s) => s.id), ['NORMAL', 'DUST_EVENT', 'FLATLINE', 'STALE_READINGS', 'INVALID_VALUES', 'CONNECTIVITY_FAILURE', 'BACKGROUND_OUTAGE', 'WEATHER_OUTAGE']);
   const set = (scenario) => api('PUT', `/municipal/simulator/sites/${kurla.id}`, { token: tokens.officer, json: { scenario } });
 
@@ -131,7 +131,7 @@ test('device and context problems are reported as such and never reach the model
 test('citizen reports the flagged site and anomaly evidence is attached automatically', async () => {
   const created = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Thick dust cloud, no water sprinkling or covers on the debris.' }),
+    form: complaintForm({ localityCode: stack.localityCodes[0], siteId: ctx.dusty.id, description: 'Thick dust cloud, no water sprinkling or covers on the debris.' }),
   });
   assert.equal(created.status, 201);
   const c = created.body.complaint;
@@ -152,7 +152,7 @@ test('citizen reports the flagged site and anomaly evidence is attached automati
 test('reporting works without an anomaly flag and without a listed site', async () => {
   const calm = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'MUM-BAN', siteId: ctx.calm.id, description: 'Visible dust from uncovered sand piles near the gate.' }),
+    form: complaintForm({ localityCode: stack.localityCodes[1], siteId: ctx.calm.id, description: 'Visible dust from uncovered sand piles near the gate.' }),
   });
   assert.equal(calm.status, 201);
   assert.equal(calm.body.complaint.hasAnomalyEvidence, false);
@@ -162,7 +162,7 @@ test('reporting works without an anomaly flag and without a listed site', async 
 
   const unlisted = await api('POST', '/complaints', {
     token: tokens.other,
-    form: complaintForm({ localityCode: 'MUM-POW', description: 'Demolition work with heavy dust behind the market.', locationText: 'Lane behind the main market', latitude: 19.12, longitude: 72.91 }),
+    form: complaintForm({ localityCode: stack.localityCodes[3], description: 'Demolition work with heavy dust behind the market.', locationText: 'Lane behind the main market', latitude: 19.12, longitude: 72.91 }),
   });
   assert.equal(unlisted.status, 201);
   assert.equal(unlisted.body.complaint.site, null);
@@ -170,18 +170,18 @@ test('reporting works without an anomaly flag and without a listed site', async 
 });
 
 test('complaint validation', async () => {
-  const noPhoto = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, []) });
+  const noPhoto = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: stack.localityCodes[0], siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, []) });
   assert.equal(noPhoto.status, 400);
   assert.ok(noPhoto.body.error.fields.photos);
   const notImage = await api('POST', '/complaints', {
     token: tokens.citizen,
-    form: complaintForm({ localityCode: 'MUM-AND', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, [{ name: 'x.png', data: Buffer.from('<script>alert(1)</script>'), type: 'image/png' }]),
+    form: complaintForm({ localityCode: stack.localityCodes[0], siteId: ctx.dusty.id, description: 'Dust everywhere today.' }, [{ name: 'x.png', data: Buffer.from('<script>alert(1)</script>'), type: 'image/png' }]),
   });
   assert.equal(notImage.status, 400);
-  const bad = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-AND', description: 'short' }) });
+  const bad = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: stack.localityCodes[0], description: 'short' }) });
   assert.equal(bad.status, 400);
   assert.ok(bad.body.error.fields.description && bad.body.error.fields.locationText);
-  const wrongLocality = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: 'MUM-KUR', siteId: ctx.dusty.id, description: 'Dust everywhere today.' }) });
+  const wrongLocality = await api('POST', '/complaints', { token: tokens.citizen, form: complaintForm({ localityCode: stack.localityCodes[2], siteId: ctx.dusty.id, description: 'Dust everywhere today.' }) });
   assert.equal(wrongLocality.status, 400);
 });
 
@@ -204,7 +204,7 @@ test('municipal inbox: search and filters', async () => {
   assert.ok(byRef.body.complaints.some((c) => c.id === ctx.calmComplaint.id));
   const byText = await api('GET', '/municipal/complaints?q=sprinkling', { token: tokens.officer });
   assert.deepEqual(byText.body.complaints.map((c) => c.id), [ctx.flaggedComplaint.id]);
-  const byLocality = await api('GET', '/municipal/complaints?locality=MUM-POW&status=SUBMITTED', { token: tokens.officer });
+  const byLocality = await api('GET', `/municipal/complaints?locality=${stack.localityCodes[3]}&status=SUBMITTED`, { token: tokens.officer });
   assert.deepEqual(byLocality.body.complaints.map((c) => c.id), [ctx.otherComplaint.id]);
   assert.equal((await api('GET', '/municipal/complaints?status=NOPE', { token: tokens.officer })).status, 400);
 });
@@ -283,7 +283,7 @@ test('lifecycle: rejection needs a reason; dashboard totals add up', async () =>
 
   const analytics = (await api('GET', '/municipal/analytics?hours=1', officer)).body;
   assert.equal(analytics.simulated, true);
-  assert.equal(analytics.localities.length, 4);
-  assert.ok(analytics.localities.find((l) => l.code === 'MUM-AND').anomalies >= 1);
+  assert.equal(analytics.localities.length, stack.localityCodes.length);
+  assert.ok(analytics.localities.find((l) => l.code === stack.localityCodes[0]).anomalies >= 1);
   assert.equal(analytics.complaintsByStatus.RESOLVED, 1);
 });

@@ -2,6 +2,9 @@ const TOKEN_KEY = 'airwatch.token';
 // Empty in development (Vite proxies /api). In production, the HTTPS origin of the API.
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
+/** Absolute URL of an API path, for resources the browser fetches itself (public images). */
+export const apiUrl = (path) => `${API_BASE}${path}`;
+
 export const tokenStore = {
   get: () => {
     try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }

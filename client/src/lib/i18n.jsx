@@ -1,12 +1,15 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import en from '../locales/en.js';
 import hi from '../locales/hi.js';
+import mr from '../locales/mr.js';
 
-const DICTIONARIES = { en, hi };
+const DICTIONARIES = { en, hi, mr };
 export const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'hi', label: 'हिन्दी' },
+  { code: 'en', label: 'English', short: 'EN' },
+  { code: 'hi', label: 'हिन्दी', short: 'हिं' },
+  { code: 'mr', label: 'मराठी', short: 'मरा' },
 ];
+const LOCALES = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' };
 const STORAGE_KEY = 'airwatch.lang';
 
 const I18nContext = createContext(null);
@@ -28,7 +31,7 @@ export function I18nProvider({ children }) {
   }, [lang]);
 
   const value = useMemo(() => {
-    const locale = lang === 'hi' ? 'hi-IN' : 'en-IN';
+    const locale = LOCALES[lang];
     const t = (key, vars) => {
       const template = DICTIONARIES[lang][key] ?? en[key] ?? key;
       return vars ? template.replace(/\{(\w+)\}/g, (_, name) => (vars[name] ?? '')) : template;

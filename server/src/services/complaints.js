@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { observationView } from './views.js';
+import { localityOfWard, wardAt } from './wards.js';
 
 export const STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'INSPECTION_ASSIGNED', 'RESOLVED', 'REJECTED'];
 export const TRANSITIONS = Object.freeze({
@@ -43,6 +44,62 @@ export async function captureSiteEvidence(siteId) {
     anomalyEvaluationId: anomaly?.id ?? null,
     sensorSnapshot: latest ? { capturedAt: new Date().toISOString(), ...JSON.parse(JSON.stringify(observationView(latest))) } : null,
   };
+}
+
+/**
+ * Where a report belongs: the verified project or monitored site it names, the ward office
+ * responsible for that place, and the monitoring area it is filed under. A report is placed by,
+ * in order: the project named, the site named, the citizen's coordinates, the ward they chose.
+ */
+export async function routeComplaint({ projectCode, siteId, localityCode, wardSlug, latitude, longitude }) {
+  const invalid = (fields) => badRequest('Some fields are invalid', { fields });
+  let project = null;
+  let site = null;
+  let ward = null;
+  let locality = localityCode ? await prisma.locality.findUnique({ where: { code: localityCode }, include: { ward: true } }) : null;
+  if (localityCode && !locality) throw invalid({ localityCode: 'Unknown locality' });
+
+  if (projectCode) {
+    project = await prisma.project.findFirst({ where: { code: projectCode, active: true }, include: { ward: true, site: true } });
+    if (!project) throw invalid({ projectCode: 'Unknown project' });
+    site = project.site?.active ? project.site : null;
+    ward = project.ward;
+  } else if (siteId) {
+    site = await prisma.site.findFirst({ where: { id: siteId }, include: { locality: { include: { ward: true } }, project: { include: { ward: true } } } });
+    if (!site || (locality && site.localityId !== locality.id)) throw invalid({ siteId: locality ? 'This site is not in the selected locality' : 'Unknown site' });
+    project = site.project;
+    ward = site.project?.ward ?? site.locality.ward;
+    locality = site.locality;
+  } else if (locality) {
+    ward = locality.ward;
+  } else if (latitude !== undefined) {
+    ward = await wardAt(latitude, longitude);
+    if (!ward) throw invalid({ latitude: 'This location is outside the mapped Mumbai wards' });
+  } else if (wardSlug) {
+    ward = await prisma.ward.findUnique({ where: { slug: wardSlug } });
+    if (!ward) throw invalid({ wardSlug: 'Unknown ward' });
+  }
+
+  locality ??= ward ? await localityOfWard(ward.id) : null;
+  if (!locality) {
+    throw invalid(ward
+      ? { [latitude !== undefined ? 'latitude' : 'wardSlug']: `${ward.name} ward is not part of the pilot yet, so reports there cannot be reviewed` }
+      : { locationText: 'Choose a project, share your location, or choose the ward' });
+  }
+  return { project, site, ward, locality };
+}
+
+/** Moderation: withhold a report from (or return it to) the public map. The case itself is untouched. */
+export async function setVisibility(id, actor, { hidden, reason }) {
+  const complaint = await loadComplaint(id);
+  if (hidden && !reason?.trim()) throw badRequest('Give the reason for hiding this report from the public map');
+  if (complaint.publicHidden === hidden) return;
+  await prisma.$transaction([
+    prisma.complaint.update({ where: { id }, data: { publicHidden: hidden, hiddenReason: hidden ? reason.trim() : null } }),
+    prisma.complaintEvent.create({
+      data: { complaintId: id, actorId: actor.id, type: 'VISIBILITY_CHANGED', note: hidden ? reason.trim() : null, metadata: { hidden } },
+    }),
+  ]);
 }
 
 async function requireOfficer(officerId) {

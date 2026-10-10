@@ -42,7 +42,7 @@ export default function Simulator() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sensor simulator</h1>
         <p className="mt-1 max-w-[70ch] text-ink-2">
-          Each demo site has a simulated monitor that uploads PM2.5, PM10, temperature and humidity through the same authenticated API a physical device uses. Pick a scenario to change what a device sends, or to interrupt the simulated background or wind feed. Any assessment still comes from the model.
+          Each verified project has a simulated DEMO monitor that uploads PM2.5, PM10, temperature and humidity through the same authenticated API a physical device uses. Pick a scenario to change what a device sends, or to interrupt the simulated background or wind feed. Any assessment still comes from the model.
         </p>
         {data ? <p className="mt-2 text-[0.875rem] text-ink-2">Background: <span className="font-medium text-ink">{data.sources.background.description}</span>. Wind: <span className="font-medium text-ink">{data.sources.weather.description}</span>.</p> : null}
       </div>
