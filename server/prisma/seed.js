@@ -10,6 +10,8 @@ import { boundaryCollection } from '../src/services/wards.js';
 
 const USERS = [
   { email: 'citizen@airwatch.test', name: 'Asha Verma', role: 'CITIZEN', password: 'Citizen@123' },
+  // A second citizen, so demo cases can show follow-up by someone other than the reporter.
+  { email: 'resident@airwatch.test', name: 'Demo Residents Group', role: 'CITIZEN', password: 'Citizen@123' },
   { email: 'officer@airwatch.test', name: 'R. Malhotra', role: 'MUNICIPAL', password: 'Officer@123' },
   { email: 'inspector@airwatch.test', name: 'S. Iyer', role: 'MUNICIPAL', password: 'Officer@123' },
 ];

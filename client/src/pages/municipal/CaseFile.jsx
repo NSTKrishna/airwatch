@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CircleCheck, Eye, EyeOff, MapPin, Paperclip, Upload } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, CircleCheck, CircleX, Eye, EyeOff, MapPin, Paperclip, Upload } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { fmtDateTime } from '../../lib/format.js';
+import { CasePositions } from '../../components/CaseRecord.jsx';
 import { DemoTag, Sources, WardOffice } from '../../components/civic.jsx';
+import { reportPersists } from '../../lib/mapMarkers.js';
 import { ReadingComparison } from '../../components/Reading.jsx';
 import SiteMap from '../../components/SiteMap.jsx';
 import { AuthImage, Button, FormField, LoadError, Notice, Panel, SourceTag, Skeleton, StatusPill, VerdictBadge } from '../../components/ui.jsx';
@@ -19,7 +21,70 @@ const AUDIT_TEXT = {
   EVIDENCE_UPLOADED: (e) => `uploaded ${e.metadata?.files?.length || 1} evidence image${(e.metadata?.files?.length || 1) === 1 ? '' : 's'}`,
   FINDINGS_UPDATED: () => 'updated the draft findings',
   VISIBILITY_CHANGED: (e) => (e.metadata?.hidden ? 'hid the report from the public map' : 'returned the report to the public map'),
+  FOLLOW_UP_ADDED: (e) => `added a follow-up: ${FOLLOW_UP_LABEL[e.metadata?.kind] || 'note'}`,
+  FOLLOW_UP_CHECKED: (e) => `${e.metadata?.check === 'VERIFIED' ? 'verified' : 'set aside'} a follow-up: ${FOLLOW_UP_LABEL[e.metadata?.kind] || 'note'}`,
 };
+
+const FOLLOW_UP_LABEL = {
+  OFFICIAL_COMPLAINT: 'official complaint filed', OFFICIAL_RESPONSE: 'official response received', STILL_UNRESOLVED: 'dust still there',
+  IMPROVEMENT_OBSERVED: 'improvement observed', DISPUTE_CLOSURE: 'closure disputed', NOTE: 'note',
+};
+const CHECK_LABEL = { UNCHECKED: 'Not yet checked', VERIFIED: 'Verified', SET_ASIDE: 'Set aside' };
+
+// Evidence a citizen submitted from outside AirWatch. Checking it says whether the evidence
+// supports what the citizen states. It is separate from the case status, in both directions.
+function FollowUp({ entry, run, busy }) {
+  const [note, setNote] = useState('');
+  const [open, setOpen] = useState(false);
+  const check = (result) => run(`check-${entry.id}`, () => api.post(`/municipal/follow-ups/${entry.id}/check`, { check: result, note }));
+  const official = entry.track === 'OFFICIAL';
+  // An official entry is verified against its document. With none attached it can only wait or be set aside.
+  const noDocument = official && !entry.attachments.some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT');
+  return (
+    <li className="py-4 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-md border px-1.5 py-0.5 text-[0.6875rem] font-semibold tracking-wide uppercase ${official ? 'border-[#b9d8d3] bg-accent-soft text-accent-strong' : 'border-[#f3c9b4] bg-[#fdf0e8] text-report'}`}>{official ? 'Official complaint' : 'Resident'}</span>
+        <span className="font-medium first-letter:uppercase">{FOLLOW_UP_LABEL[entry.kind]}</span>
+        {entry.isDemo ? <DemoTag>Demo history</DemoTag> : null}
+        <span className={`ml-auto inline-flex items-center gap-1 text-[0.8125rem] font-medium ${entry.check === 'VERIFIED' ? 'text-ok' : 'text-ink-2'}`}>
+          {entry.check === 'VERIFIED' ? <BadgeCheck className="size-4" aria-hidden /> : entry.check === 'SET_ASIDE' ? <CircleX className="size-4" aria-hidden /> : null}{CHECK_LABEL[entry.check]}
+        </span>
+      </div>
+      <p className="num mt-1 text-[0.8125rem] text-ink-2">
+        {entry.author?.name} ({entry.by === 'REPORTER' ? 'the reporter' : 'another resident'}) · added {fmtDateTime(entry.createdAt)}
+        {entry.distanceFromSiteM != null ? ` · about ${entry.distanceFromSiteM} m from the reported place` : ' · no location shared'}
+      </p>
+      {entry.officialReference ? (
+        <p className="num mt-2 text-[0.875rem]">Reference <span className="font-semibold">{entry.officialReference}</span>{entry.officialChannel ? ` · ${entry.officialChannel}` : ''}{entry.occurredOn ? ` · dated ${entry.occurredOn}` : ''}</p>
+      ) : null}
+      {entry.note ? <p className="mt-2 max-w-[72ch] text-[0.875rem] whitespace-pre-line">{entry.note}</p> : null}
+      {entry.attachments.length ? (
+        <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {entry.attachments.map((a) => (
+            <li key={a.id}>
+              <div className="overflow-hidden rounded-lg border border-line"><AuthImage url={a.url} alt={a.kind === 'OFFICIAL_ACKNOWLEDGMENT' ? 'Acknowledgment or official document' : 'Follow-up photograph'} className="aspect-square w-full" /></div>
+              <p className="mt-1 text-[0.75rem] text-ink-2">{a.kind === 'OFFICIAL_ACKNOWLEDGMENT' ? 'Acknowledgment or reply. Never public.' : 'Photograph. Public once verified.'}</p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {entry.checkNote ? <p className="mt-2 rounded-lg bg-paper px-3 py-2 text-[0.8125rem] text-ink-2">Moderator{entry.checkedBy ? ` (${entry.checkedBy})` : ''}: {entry.checkNote}</p> : null}
+      {open ? (
+        <div className="mt-3 space-y-3">
+          <FormField label="Note on the check" htmlFor={`check-${entry.id}`} hint="Shown publicly with the entry. Required to set an entry aside.">
+            <textarea id={`check-${entry.id}`} rows={2} className="field resize-y" value={note} onChange={(e) => setNote(e.target.value)} />
+          </FormField>
+          {noDocument ? <p className="text-[0.8125rem] text-warn">No acknowledgment or reply was attached, so this cannot be verified. Ask the citizen to add it, or set the entry aside.</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" icon={BadgeCheck} disabled={noDocument} loading={busy === `check-${entry.id}`} onClick={() => check('VERIFIED')}>Evidence supports it</Button>
+            <Button size="sm" variant="danger" icon={CircleX} disabled={!note.trim()} loading={busy === `check-${entry.id}`} onClick={() => check('SET_ASIDE')}>Set aside</Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </div>
+      ) : <Button className="mt-3" size="sm" variant="secondary" onClick={() => setOpen(true)}>{entry.check === 'UNCHECKED' ? 'Check this evidence' : 'Change the result'}</Button>}
+    </li>
+  );
+}
 
 // Moderation of the public map: separate from the case status, and always with a reason.
 function Visibility({ complaint, run, busy }) {
@@ -275,9 +340,19 @@ export default function CaseFile() {
             {hasPoint ? (
               <div className="mt-4">
                 <SiteMap label="Complaint location" className="h-52"
-                  sites={[{ id: c.id, name: c.site?.name || 'Reported location', latitude: c.latitude, longitude: c.longitude, verdict: c.hasAnomalyEvidence ? 'flagged' : 'none' }]} />
+                  sites={[{ id: c.id, name: `Reported location, ${c.reference}`, latitude: c.latitude, longitude: c.longitude, report: { status: c.status, persists: reportPersists(c) } }]} />
               </div>
             ) : null}
+          </Panel>
+
+          <Panel className="p-4 sm:p-5">
+            <h2 className="font-semibold">Citizen follow-up and official evidence</h2>
+            <p className="mt-1 max-w-[72ch] text-[0.875rem] text-ink-2">
+              Added by citizens from outside this desk. Verifying an entry says its evidence supports what the citizen states: it does not change this case's status, and resolving the case here does not mark the dust as fixed.
+            </p>
+            {c.followUps.length
+              ? <ul className="mt-4 divide-y divide-line">{c.followUps.map((f) => <FollowUp key={`${f.id}-${f.check}-${f.checkNote}`} entry={f} run={run} busy={busy} />)}</ul>
+              : <p className="mt-3 text-[0.875rem] text-ink-2">Nothing has been added yet. The citizen has not recorded an official complaint or a follow-up observation.</p>}
           </Panel>
 
           <Panel className="p-4 sm:p-5">
@@ -367,6 +442,11 @@ export default function CaseFile() {
               </dl>
             ) : null}
             <Actions key={`${c.status}-${c.updatedAt}`} complaint={c} allowed={data.allowedTransitions} officers={officers.data?.officers || []} run={run} busy={busy} />
+          </Panel>
+
+          <Panel className="p-4">
+            <h2 className="mb-3 font-semibold">Where this case stands</h2>
+            <CasePositions report={c} />
           </Panel>
 
           <Panel className="p-4">

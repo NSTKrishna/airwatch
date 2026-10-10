@@ -107,24 +107,41 @@ async function backfill(devices) {
 // and that ward's monitored projects, so the history follows whatever the reference data holds.
 const HISTORY = [
   { ward: 0, project: 0, hoursAgo: 3, stage: 'SUBMITTED', text: 'Dust blowing across the road from uncovered excavated soil since morning. No water sprinkling seen.' },
-  { ward: 0, project: 1, hoursAgo: 28, stage: 'UNDER_REVIEW', text: 'Dumpers leaving the site without covers and dropping soil on the service road. The dust hangs in the air all afternoon.' },
+  { ward: 0, project: 1, hoursAgo: 28, stage: 'UNDER_REVIEW', text: 'Dumpers leaving the site without covers and dropping soil on the service road. The dust hangs in the air all afternoon.',
+    followUps: [
+      { kind: 'OFFICIAL_COMPLAINT', hoursAgo: 26, channel: 'marg-portal', ack: true, check: 'VERIFIED', checkNote: 'Reference matches the acknowledgment submitted.' },
+      { kind: 'STILL_UNRESOLVED', by: 'resident', hoursAgo: 5, photo: true, note: 'Went past this evening. Dumpers still leaving uncovered.' },
+    ] },
   { ward: 0, project: 2, hoursAgo: 77, stage: 'INSPECTION_ASSIGNED', text: 'Barricade sheets are torn on the road side, and cutting work throws dust straight onto the footpath.',
     instruction: 'Check barricade height and whether wet cutting is in use.' },
   { ward: 0, project: 0, hoursAgo: 190, stage: 'RESOLVED', text: 'Debris heap left uncovered next to the compound wall. Dust settles on the cars parked in the lane.',
     note: 'Visited the site. Debris stack on the north side had no cover; sprinkler line was not running.',
     findings: 'Construction debris was stored uncovered along the north boundary and no sprinkling was in progress during the visit.',
-    action: 'Site supervisor told to cover the debris with tarpaulin and run the sprinkler line during working hours. Re-check noted for one week later.' },
+    action: 'Site supervisor told to cover the debris with tarpaulin and run the sprinkler line during working hours. Re-check noted for one week later.',
+    // Closed by the AirWatch desk, and disputed by the person who reported it.
+    followUps: [
+      { kind: 'DISPUTE_CLOSURE', hoursAgo: 40, photo: true, check: 'VERIFIED', checkNote: 'Photograph shows the debris stack uncovered.', note: 'The cover lasted two days. The debris is open again and nothing is being sprinkled.' },
+      { kind: 'STILL_UNRESOLVED', by: 'resident', hoursAgo: 16, photo: true, note: 'Same this morning: open debris, dust on the lane.' },
+    ] },
   { ward: 1, project: 0, hoursAgo: 6, stage: 'SUBMITTED', text: 'Thick dust near the gate whenever trucks enter. Wheels are not being washed and the road is brown with mud.' },
   { ward: 1, project: 1, hoursAgo: 40, stage: 'UNDER_REVIEW', text: 'Concrete breaking work in the open without any screen. Fine dust reaches the bus stop across the road.' },
   { ward: 1, project: 2, hoursAgo: 120, stage: 'RESOLVED', text: 'Sand and aggregate piled in the open, uncovered. Wind carries it into the housing society next door.',
     note: 'Material stack confirmed uncovered on the east side. Photographed.',
     findings: 'Loose sand and aggregate were stockpiled without a cover on the east side of the plot.',
-    action: 'Contractor told to cover stockpiles and wet them twice a day. Cover was in place at the follow-up visit.' },
+    action: 'Contractor told to cover stockpiles and wet them twice a day. Cover was in place at the follow-up visit.',
+    // The whole loop: filed officially, a response recorded, and residents confirm the improvement.
+    followUps: [
+      { kind: 'OFFICIAL_COMPLAINT', hoursAgo: 116, channel: 'mybmc-app', ack: true, check: 'VERIFIED', checkNote: 'Reference matches the acknowledgment submitted.' },
+      { kind: 'OFFICIAL_RESPONSE', hoursAgo: 70, ack: true, check: 'VERIFIED', checkNote: 'Reply as submitted by the citizen.', note: 'Reply received through the app: site visited and the contractor instructed to cover material.' },
+      { kind: 'IMPROVEMENT_OBSERVED', by: 'resident', hoursAgo: 30, photo: true, check: 'VERIFIED', checkNote: 'Photograph shows covered stockpiles.', note: 'Stockpiles covered with green sheet and the road was being sprinkled this afternoon.' },
+    ] },
   { ward: 1, project: 0, hoursAgo: 150, stage: 'REJECTED', text: 'Dust on the main road in the evening near the signal.',
     reason: 'The photographs show road sweeping on the public road, not work at a construction site. Outside this pilot\'s single category.' },
   { ward: 2, project: 0, hoursAgo: 10, stage: 'SUBMITTED', text: 'Demolition of the old structure going on with no water spray. The whole lane is covered in grey dust.' },
   { ward: 2, project: 1, hoursAgo: 55, stage: 'INSPECTION_ASSIGNED', text: 'Excavated earth loaded onto trucks all night with no covers. Dust inside our flats by morning.',
-    instruction: 'Night visit if possible; check truck covers and wheel washing.' },
+    instruction: 'Night visit if possible; check truck covers and wheel washing.',
+    // Filed officially two days ago; the acknowledgment has not been checked yet.
+    followUps: [{ kind: 'OFFICIAL_COMPLAINT', hoursAgo: 50, channel: 'helpline-1916', ack: false }] },
   { ward: 2, project: 2, hoursAgo: 96, stage: 'UNDER_REVIEW', text: 'No green net or sheet on the upper floors where plastering and grinding are in progress.' },
   { ward: 2, project: 1, hoursAgo: 215, stage: 'RESOLVED', text: 'Dry cutting of stone at the entrance in the open. Clouds of white dust during the day.',
     note: 'Dry cutting confirmed at the entrance bay; no misting in use.',
@@ -137,7 +154,8 @@ const HISTORY = [
   { ward: 3, project: 0, hoursAgo: 170, stage: 'RESOLVED', text: 'No sprinkling at all during excavation. Dust visible from our building through the day.',
     note: 'Excavation in progress; tanker on site but not in use at the time of the visit.',
     findings: 'Excavation was in progress without water sprinkling although a tanker was available on site.',
-    action: 'Site told to sprinkle during excavation and loading. Sprinkling was observed at the follow-up visit.' },
+    action: 'Site told to sprinkle during excavation and loading. Sprinkling was observed at the follow-up visit.',
+    followUps: [{ kind: 'IMPROVEMENT_OBSERVED', hoursAgo: 60, photo: true, note: 'Sprinkling seen during loading on two visits this week.' }] },
   { ward: 0, project: null, hoursAgo: 60, stage: 'UNDER_REVIEW', text: 'Small plot being dug up behind the shops with no barricade at all. Not on your project list.' },
   { ward: 2, project: null, hoursAgo: 130, stage: 'REJECTED', text: 'Dust in the air near the junction, source not clear.',
     reason: 'No construction activity could be identified from the photographs or the location given.' },
@@ -152,7 +170,8 @@ async function demoComplaints(sites) {
   const citizen = users['citizen@airwatch.test'];
   const officer = users['officer@airwatch.test'];
   const inspector = users['inspector@airwatch.test'];
-  if (!citizen || !officer || !inspector) throw new Error('Run `npm run db:seed` first: demo accounts are missing');
+  const resident = users['resident@airwatch.test'];
+  if (!citizen || !officer || !inspector || !resident) throw new Error('Run `npm run db:seed` first: demo accounts are missing');
 
   const wards = await prisma.ward.findMany({ where: { pilot: true }, orderBy: { code: 'asc' } });
   const sitesOf = (ward) => sites.filter((s) => s.project?.wardId === ward.id);
@@ -213,6 +232,41 @@ async function demoComplaints(sites) {
       await prisma.complaintEvent.update({ where: { id: event.id }, data: { createdAt: last } });
     }
     await prisma.$executeRaw`UPDATE "Complaint" SET "updatedAt" = ${last} WHERE id = ${id}`;
+
+    // Citizen follow-up on the demo case: official complaints with made-up DEMO references,
+    // and what residents saw afterwards. Written directly so each entry keeps its own time.
+    for (const [n, f] of (h.followUps || []).entries()) {
+      const author = f.by === 'resident' ? resident : citizen;
+      const at = new Date(Date.now() - f.hoursAgo * HOUR_MS);
+      const entry = await prisma.followUp.create({
+        data: {
+          complaintId: id, authorId: author.id, kind: f.kind, isDemo: true, createdAt: at, occurredOn: at,
+          note: f.note ?? null, latitude: f.photo ? site.latitude : null, longitude: f.photo ? site.longitude : null,
+          officialChannel: f.channel ?? null,
+          officialReference: f.kind === 'OFFICIAL_COMPLAINT' ? `DEMO-${String(index + 1).padStart(2, '0')}${n + 1}-NOT-REAL` : null,
+          check: f.check ?? 'UNCHECKED', checkNote: f.checkNote ?? null,
+          checkedById: f.check ? officer.id : null, checkedAt: f.check ? new Date(at.getTime() + 3 * HOUR_MS) : null,
+        },
+      });
+      const files = [
+        ...(f.photo ? [{ kind: 'FOLLOW_UP_PHOTO', name: 'placeholder-follow-up.png', colour: [160, 170, 150] }] : []),
+        ...(f.ack ? [{ kind: 'OFFICIAL_ACKNOWLEDGMENT', name: 'placeholder-acknowledgment.png', colour: [200, 200, 205] }] : []),
+      ];
+      for (const file of files) {
+        await prisma.attachment.createMany({
+          data: toAttachmentRows([{ originalname: file.name, buffer: placeholderPng(480, 360, file.colour) }],
+            { complaintId: id, uploadedById: author.id, kind: file.kind, followUpId: entry.id }),
+        });
+      }
+      await prisma.complaintEvent.create({
+        data: { complaintId: id, actorId: author.id, type: 'FOLLOW_UP_ADDED', createdAt: at, metadata: { followUpId: entry.id, kind: f.kind, photos: f.photo ? 1 : 0, acknowledgment: Boolean(f.ack) } },
+      });
+      if (f.check) {
+        await prisma.complaintEvent.create({
+          data: { complaintId: id, actorId: officer.id, type: 'FOLLOW_UP_CHECKED', createdAt: entry.checkedAt, note: f.checkNote ?? null, metadata: { followUpId: entry.id, kind: f.kind, check: f.check, previous: 'UNCHECKED' } },
+        });
+      }
+    }
     created += 1;
   }
   console.log(`Created ${created} demo cases across ${wards.length} pilot wards, labelled as demo history.`);

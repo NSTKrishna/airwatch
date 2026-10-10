@@ -39,7 +39,7 @@ export default function PublicLayout() {
             {officer ? null : <Link to={REPORT} className={`${buttonClass({ size: 'sm' })} max-md:hidden`}><Camera className="size-4" aria-hidden />{t('nav.reportDust')}</Link>}
             {user ? <SignOutButton compact /> : (
               <Link to="/login" state={{ from: location.pathname }} title={t('auth.signIn')}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-medium text-ink-2 transition-colors duration-150 hover:bg-mute-soft hover:text-ink">
+                className="inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-medium text-ink-2 transition-colors duration-150 hover:bg-mute-soft hover:text-ink sm:h-8 sm:min-w-0">
                 <LogIn className="size-4" aria-hidden /><span className="max-sm:sr-only">{t('auth.signIn')}</span>
               </Link>
             )}

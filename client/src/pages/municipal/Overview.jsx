@@ -4,6 +4,7 @@ import { ArrowRight, CircleCheck, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { fmtNumber, fmtRelative, verdictOf } from '../../lib/format.js';
+import MapLegend from '../../components/MapLegend.jsx';
 import SiteMap from '../../components/SiteMap.jsx';
 import { LocalityTrendChart } from '../../components/charts.jsx';
 import { Button, LoadError, Notice, Panel, Skeleton, VerdictBadge } from '../../components/ui.jsx';
@@ -99,6 +100,13 @@ export default function Overview() {
         </Notice>
       ) : null}
 
+      {summary.data?.followUpsToCheck ? (
+        <Notice tone="warn" title={`${summary.data.followUpsToCheck} citizen follow-up${summary.data.followUpsToCheck === 1 ? '' : 's'} waiting to be checked`}
+          action={<Link to="/municipal/complaints?followUp=unchecked" className="shrink-0 text-[0.875rem] font-medium text-accent underline">Open the queue</Link>}>
+          Official acknowledgments and site observations that citizens added. They stay marked "not yet checked" in public until someone looks.
+        </Notice>
+      ) : null}
+
       {summary.error && !summary.data ? <LoadError error={summary.error} onRetry={summary.reload} />
         : summary.data ? <StatStrip summary={summary.data} /> : <Skeleton className="h-28" />}
 
@@ -111,6 +119,7 @@ export default function Overview() {
           {flagged.error && !flagged.data ? <LoadError error={flagged.error} onRetry={flagged.reload} />
             : flagged.data ? <SiteMap label="Map of monitored construction sites" className="h-[26rem]" sites={sites} renderPopup={(site) => <SitePopup site={site} />} />
               : <Skeleton className="h-[26rem]" />}
+          <div className="mt-3 rounded-lg border border-line bg-surface px-3 py-2.5"><MapLegend layers={['projects', 'sensors']} /></div>
         </section>
 
         <div className="space-y-5">

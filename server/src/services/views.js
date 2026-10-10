@@ -2,6 +2,7 @@
 // separate functions so internal fields cannot leak by accident.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
+import { followUpInclude, followUpMunicipalView, followUpPublicView, positions } from './followUps.js';
 import { isActiveAnomaly } from './monitoring.js';
 
 export const complaintReference = (c) => `AW-${new Date(c.createdAt).getUTCFullYear()}-${String(c.seq).padStart(5, '0')}`;
@@ -60,6 +61,12 @@ export function observationView(o) {
 }
 
 const wardRef = (w) => (w ? { code: w.code, slug: w.slug, name: w.name } : null);
+
+// The project a report names, with what a citizen needs to quote it in an official complaint.
+const projectRef = (p) => (p ? {
+  code: p.code, name: p.name, address: p.address, developer: p.developer, authority: p.authority, registrationNo: p.registrationNo,
+  latitude: p.latitude, longitude: p.longitude,
+} : null);
 
 const stationView = (s) => ({
   code: s.code, name: s.name, latitude: s.latitude, longitude: s.longitude, provenance: s.provenance, simulated: s.provenance === 'SIMULATED', operator: s.operator,
@@ -176,9 +183,11 @@ const complaintBase = (c) => ({
   site: c.site ? { id: c.site.id, code: c.site.code, name: c.site.name, address: c.site.address, latitude: c.site.latitude, longitude: c.site.longitude } : null,
   // Routing: the ward office the report was directed to, and the verified project it names.
   ward: wardRef(c.ward),
-  project: c.project ? { code: c.project.code, name: c.project.name } : null,
+  project: projectRef(c.project),
   isDemo: c.isDemo,
   hasAnomalyEvidence: Boolean(c.anomalyEvaluationId),
+  // AirWatch review, official complaint and residents' observations, kept apart.
+  positions: c.followUps ? positions(c, c.followUps) : undefined,
 });
 
 // Citizens see public lifecycle events only: no internal notes, no officer identities.
@@ -200,6 +209,7 @@ export function complaintCitizenView(c, { detail = false } = {}) {
     timeline: (c.events || [])
       .filter((e) => CITIZEN_EVENT_TYPES.has(e.type))
       .map((e) => ({ id: e.id, type: e.type, fromStatus: e.fromStatus, toStatus: e.toStatus, createdAt: e.createdAt })),
+    followUps: (c.followUps || []).map((f) => followUpPublicView(f, c)),
   };
 }
 
@@ -224,6 +234,7 @@ export function complaintMunicipalView(c, { detail = false } = {}) {
     findings: c.findings,
     correctiveAction: c.correctiveAction,
     attachments: (c.attachments || []).map((a) => ({ ...attachmentView(a), uploadedBy: a.uploadedBy?.name })),
+    followUps: (c.followUps || []).map((f) => followUpMunicipalView(f, c)),
     audit: (c.events || []).map((e) => ({
       id: e.id, type: e.type, fromStatus: e.fromStatus, toStatus: e.toStatus, note: e.note,
       metadata: e.metadata, createdAt: e.createdAt, actor: e.actor ? { name: e.actor.name, role: e.actor.role } : null,
@@ -241,6 +252,17 @@ export const complaintDetailInclude = {
   anomalyEvaluation: { include: { observation: true } },
   attachments: { orderBy: { createdAt: 'asc' }, omit: { data: true }, include: { uploadedBy: true } },
   events: { orderBy: { createdAt: 'asc' }, include: { actor: true } },
+  followUps: followUpInclude,
+};
+
+/** Enough of a complaint for a list row, including what its three positions are derived from. */
+export const complaintListInclude = {
+  locality: true,
+  site: true,
+  ward: true,
+  project: true,
+  followUps: true,
+  events: { where: { type: 'STATUS_CHANGED' }, orderBy: { createdAt: 'asc' }, select: { type: true, toStatus: true, createdAt: true } },
 };
 
 // --- Wards and projects (reference data from cited public sources) ---
@@ -304,11 +326,12 @@ export function complaintPublicView(c, { detail = false } = {}) {
     longitude: onProject ? c.project.longitude : round3(c.longitude),
     locationApproximate: !onProject,
     ward: wardRef(c.ward),
-    project: c.project ? { code: c.project.code, name: c.project.name } : null,
+    project: projectRef(c.project),
     description: reviewed ? c.description : null,
     locationText: reviewed ? c.locationText : null,
     photoCount: c._count?.attachments ?? photos.length,
     hasSensorFlag: Boolean(c.anomalyEvaluationId),
+    positions: positions(c, c.followUps || []),
   };
   if (!detail) return view;
   return {
@@ -320,6 +343,7 @@ export function complaintPublicView(c, { detail = false } = {}) {
     timeline: (c.events || [])
       .filter((e) => CITIZEN_EVENT_TYPES.has(e.type))
       .map((e) => ({ id: e.id, type: e.type, fromStatus: e.fromStatus, toStatus: e.toStatus, createdAt: e.createdAt })),
+    followUps: (c.followUps || []).map((f) => followUpPublicView(f, c)),
   };
 }
 

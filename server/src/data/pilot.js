@@ -11,7 +11,8 @@
 // PROJECTS   Construction projects that public records show as under way. `coordinateSource` says
 //            how the position was obtained and `coordinatePrecision` how exact it is (site, street
 //            or locality). A DEMO monitor is attached only at site or street precision.
-// DUST_AUTHORITY  Who deals with construction dust and how to complain officially.
+// DUST_AUTHORITY  Who deals with construction dust and how to complain officially. Each channel has a
+//            key (stored with a citizen's official complaint reference) and the page it was checked on.
 
 /** Code of the monitoring area (Locality) that a pilot ward's sites and reports are filed under. */
 export const localityCodeFor = (ward) => `MUM-${ward.slug.toUpperCase()}`;
@@ -1374,29 +1375,46 @@ export const DUST_AUTHORITY = {
   ],
   "channels": [
     {
-      "name": "BMC helpline 1916",
-      "detail": "central 24x7 helpline for civic complaints",
-      "url": null
-    },
-    {
+      "key": "marg-portal",
       "name": "BMC MARG grievance portal",
-      "detail": "online complaint with a mobile number and OTP",
-      "url": "https://marg.mcgm.gov.in/MARG/welcomePage.html"
+      "detail": "online complaint with a mobile number and OTP; gives a grievance ID you can look up later",
+      "url": "https://marg.mcgm.gov.in/MARG/welcomePage.html",
+      "phone": null
     },
     {
+      "key": "mybmc-app",
       "name": "MyBMC MARG app (Android)",
       "detail": "BMC's grievance app with photo upload and status tracking",
-      "url": "https://play.google.com/store/apps/details?id=com.esri.ugms_bmc"
+      "url": "https://play.google.com/store/apps/details?id=com.esri.ugms_bmc",
+      "phone": null
     },
     {
+      "key": "helpline-1916",
+      "name": "BMC helpline 1916",
+      "detail": "central 24x7 helpline for civic complaints",
+      "url": "https://www.mcgm.gov.in/irj/portal/anonymous",
+      "phone": "1916"
+    },
+    {
+      "key": "mumbai-air-app",
       "name": "Mumbai Air app (Android)",
       "detail": "BMC's app for air pollution complaints; its store listing was last updated in October 2024",
-      "url": "https://play.google.com/store/apps/details?id=com.abelsoft.mumbai_air"
+      "url": "https://play.google.com/store/apps/details?id=com.abelsoft.mumbai_air",
+      "phone": null
     },
     {
+      "key": "ward-office",
+      "name": "Ward office or ward control room",
+      "detail": "in writing at the ward office, or by phone to the control room listed for the ward",
+      "url": "https://portal.mcgm.gov.in/irj/portal/anonymous/BMC-on-Map-Wards-Offices",
+      "phone": null
+    },
+    {
+      "key": "mpcb-sro",
       "name": "MPCB sub-regional office",
       "detail": "Mumbai-II for H/East and L (sromumbai2@mpcb.gov.in), Mumbai-III for K/East and S (sromumbai3@mpcb.gov.in)",
-      "url": "https://www.mpcb.gov.in/en/node/478"
+      "url": "https://www.mpcb.gov.in/en/node/478",
+      "phone": null
     }
   ],
   "sourceUrls": [

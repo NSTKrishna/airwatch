@@ -22,7 +22,7 @@ export function LanguageToggle() {
       <Languages className="mx-1.5 size-4 text-ink-3 max-sm:hidden" aria-hidden />
       {LANGUAGES.map((l) => (
         <button key={l.code} type="button" lang={l.code} aria-pressed={lang === l.code} aria-label={l.label} title={l.label} onClick={() => setLang(l.code)}
-          className={`h-7 rounded-md px-2 text-[0.8125rem] font-medium transition-colors duration-150 ${lang === l.code ? 'bg-accent text-white' : 'text-ink-2 hover:bg-mute-soft'}`}>
+          className={`h-9 min-w-9 rounded-md px-2 text-[0.8125rem] font-medium transition-colors duration-150 sm:h-7 ${lang === l.code ? 'bg-accent text-white' : 'text-ink-2 hover:bg-mute-soft'}`}>
           <span className="sm:hidden">{l.short}</span><span className="max-sm:hidden">{l.label}</span>
         </button>
       ))}
@@ -35,7 +35,7 @@ export function SignOutButton({ compact = false }) {
   const { t } = useI18n();
   return (
     <button type="button" onClick={signOut} title={t('common.signOut')}
-      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-medium text-ink-2 transition-colors duration-150 hover:bg-mute-soft hover:text-ink">
+      className="inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg px-2 text-[0.8125rem] font-medium text-ink-2 transition-colors duration-150 hover:bg-mute-soft hover:text-ink sm:h-8 sm:min-w-0">
       <LogOut className="size-4" aria-hidden />
       <span className={compact ? 'sr-only' : ''}>{t('common.signOut')}</span>
     </button>

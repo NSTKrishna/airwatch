@@ -11,7 +11,7 @@ const serverDir = fileURLToPath(new URL('../..', import.meta.url));
 // 1x1 PNG.
 export const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
-const TABLES = ['ComplaintEvent', 'Attachment', 'Complaint', 'AnomalyEvaluation', 'SensorObservation', 'DeviceReading', 'IngestionBatch',
+const TABLES = ['ComplaintEvent', 'Attachment', 'FollowUp', 'Complaint', 'AnomalyEvaluation', 'SensorObservation', 'DeviceReading', 'IngestionBatch',
   'BackgroundObservation', 'WeatherObservation', 'Device', 'SimulatorState', 'Site', 'Station', 'Locality', 'Project', 'Representative', 'Ward', 'User'];
 
 export async function startStack(extraEnv = {}) {
@@ -39,8 +39,8 @@ export async function startStack(extraEnv = {}) {
   simulator.setIngestBaseUrl(origin);
   const base = `${origin}/api`;
 
-  async function api(method, path, { token, json, form, raw } = {}) {
-    const headers = {};
+  async function api(method, path, { token, json, form, raw, headers: extra } = {}) {
+    const headers = { ...extra };
     if (token) headers.authorization = `Bearer ${token}`;
     if (json !== undefined || raw !== undefined) headers['content-type'] = 'application/json';
     const response = await fetch(`${base}${path}`, { method, headers, body: raw ?? (json !== undefined ? JSON.stringify(json) : form) });
