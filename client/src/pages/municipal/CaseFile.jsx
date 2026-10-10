@@ -39,7 +39,7 @@ function FollowUp({ entry, run, busy }) {
   const check = (result) => run(`check-${entry.id}`, () => api.post(`/municipal/follow-ups/${entry.id}/check`, { check: result, note }));
   const official = entry.track === 'OFFICIAL';
   // An official entry is verified against its document. With none attached it can only wait or be set aside.
-  const noDocument = official && entry.attachments.length === 0;
+  const noDocument = official && !entry.attachments.some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT');
   return (
     <li className="py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">

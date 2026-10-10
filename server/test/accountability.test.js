@@ -240,6 +240,11 @@ test('residents add what they see on site; text and photographs wait for a moder
   assert.equal(seen.distanceFromSiteM, 100, 'distance from the site, never the position');
   assert.equal('latitude' in seen, false);
   const file = await caseFile(ctx.report.id);
+  // The case desk gets the same distance, not the resident's coordinates.
+  const forDesk = file.complaint.followUps.at(-1);
+  assert.equal(forDesk.distanceFromSiteM, 100);
+  assert.equal('latitude' in forDesk || 'longitude' in forDesk, false);
+  assert.equal(JSON.stringify(file.complaint.followUps).includes(String(p.latitude + 0.0009)), false);
   const photo = file.complaint.followUps.at(-1).attachments[0];
   assert.equal((await api('GET', `/public/attachments/${photo.id}`)).status, 404);
   assert.equal((await api('GET', photo.url.replace('/api', ''), { token: tokens.other })).status, 200, 'the uploader can see their own photograph');
@@ -292,6 +297,17 @@ test('an official entry cannot be verified without the document it is checked ag
   const refused = await check(entry.id, { check: 'VERIFIED' });
   assert.equal(refused.status, 400);
   assert.match(refused.body.error.message, /nothing to check this against/);
+  // A site photograph cannot be passed off as the acknowledgment, on a complaint or on a response.
+  const crafted = await followUp(reference, tokens.other, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-78', occurredOn: today() }, { photos: [PNG] });
+  assert.equal(crafted.status, 400);
+  assert.ok(crafted.body.error.fields.photos);
+  const craftedReply = await followUp(reference, tokens.other, { kind: 'OFFICIAL_RESPONSE', note: 'They said a notice was issued.' }, { photos: [PNG] });
+  assert.ok(craftedReply.body.error.fields.photos && craftedReply.body.error.fields.acknowledgment);
+  // An older row holding only a photograph still cannot be verified.
+  const legacy = await prisma.followUp.create({ data: { complaintId: id, authorId: (await prisma.user.findUnique({ where: { email: 'neighbour@example.com' } })).id, kind: 'OFFICIAL_COMPLAINT', officialChannel: 'other', officialReference: 'TEST-OLD-1' } });
+  await prisma.attachment.create({ data: { complaintId: id, uploadedById: legacy.authorId, followUpId: legacy.id, kind: 'FOLLOW_UP_PHOTO', filename: 'site.png', mimeType: 'image/png', sizeBytes: PNG.length, data: PNG } });
+  assert.equal((await check(legacy.id, { check: 'VERIFIED' })).status, 400);
+  await check(legacy.id, { check: 'SET_ASIDE', note: 'Photograph is not an acknowledgment.' });
   assert.equal((await check(entry.id, { check: 'SET_ASIDE', note: 'No acknowledgment was attached.' })).status, 200);
 });
 

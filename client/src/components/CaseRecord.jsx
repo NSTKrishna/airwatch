@@ -130,7 +130,8 @@ export function ShareCase({ report }) {
 
 const MAX_PHOTOS = 4;
 const MAX_BYTES = 5 * 1024 * 1024;
-const todayLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+// Today's date in Mumbai, as YYYY-MM-DD: the server judges "not in the future" by the same calendar.
+const todayLocal = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 function FileList({ id, files, setFiles, max, label, hint, error }) {
   const { t } = useI18n();

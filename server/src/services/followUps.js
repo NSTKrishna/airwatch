@@ -37,7 +37,7 @@ export function followUpProblems({ kind, note, occurredOn, officialChannel, offi
     if (!occurredOn) fields.occurredOn = 'Enter the date you filed it';
   } else if (kind === 'OFFICIAL_RESPONSE') {
     if (text.length < 10) fields.note = 'Say what the response was, in at least 10 characters';
-    if (photos + acknowledgments === 0) fields.acknowledgment = 'Attach the reply, notice or a photograph that shows it';
+    if (acknowledgments === 0) fields.acknowledgment = 'Attach the reply, notice or a photograph that shows it';
   } else if (kind === 'DISPUTE_CLOSURE') {
     if (!isClosed(complaintStatus)) fields.kind = 'Only a closed case can be disputed';
     if (text.length < 10) fields.note = 'Say why you disagree, in at least 10 characters';
@@ -47,6 +47,9 @@ export function followUpProblems({ kind, note, occurredOn, officialChannel, offi
     fields.note = 'Add a photograph or describe what you saw in at least 10 characters';
   }
   if (!OFFICIAL.has(kind) && acknowledgments) fields.acknowledgment = 'An acknowledgment belongs with an official complaint or response';
+  // An official entry carries its document and nothing else, so a site photograph can never
+  // stand in for the acknowledgment a moderator has to compare.
+  if (OFFICIAL.has(kind) && photos) fields.photos = 'Attach the acknowledgment or reply as the document, not as a site photograph';
   return fields;
 }
 
@@ -87,7 +90,9 @@ export async function addFollowUp(complaint, author, input, { photoRows = [], ac
  * statement about the evidence submitted. It does not change the AirWatch review status.
  */
 export async function checkFollowUp(id, actor, { check, note }) {
-  const followUp = await prisma.followUp.findUnique({ where: { id }, include: { _count: { select: { attachments: true } } } });
+  const followUp = await prisma.followUp.findUnique({
+    where: { id }, include: { _count: { select: { attachments: { where: { kind: 'OFFICIAL_ACKNOWLEDGMENT' } } } } },
+  });
   if (!followUp) throw notFound('Follow-up not found');
   if (check === 'SET_ASIDE' && !note?.trim()) throw badRequest('Give the reason for setting this follow-up aside');
   // "Acknowledgment on record" means a document was compared. Without one there is nothing to verify.
@@ -239,8 +244,7 @@ export function followUpMunicipalView(f, complaint) {
     note: f.note,
     officialReference: f.officialReference,
     officialChannelKey: f.officialChannel,
-    latitude: f.latitude,
-    longitude: f.longitude,
+    // The citizen's position stays in the database. The case desk gets the distance, as the public does.
     author: f.author ? { id: f.author.id, name: f.author.name, email: f.author.email } : null,
     checkedBy: f.checkedBy?.name ?? null,
     attachments: (f.attachments || []).map((a) => ({ id: a.id, kind: a.kind, filename: a.filename, url: `/api/attachments/${a.id}` })),
