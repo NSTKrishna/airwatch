@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: API tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: airwatch
+          POSTGRES_PASSWORD: airwatch
+          POSTGRES_DB: airwatch_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U airwatch" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # The suite refuses to run against DATABASE_URL itself; it uses TEST_DATABASE_URL.
+      DATABASE_URL: postgresql://airwatch:airwatch@localhost:5432/airwatch?schema=public
+      TEST_DATABASE_URL: postgresql://airwatch:airwatch@localhost:5432/airwatch_test?schema=public
+      JWT_SECRET: ci-only-jwt-secret-0123456789abcdef0123456789abcdef
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+
+  client:
+    name: Client build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  infra:
+    name: Infrastructure template
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # Synthesis needs no AWS account: it only renders the CloudFormation template.
+      - run: npx cdk synth --quiet -c alertEmail=ci@example.org -c sshCidr=203.0.113.7/32 -c keyPairName=ci -c bundleId=ci
+
+  deploy-files:
+    name: Deployment files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell scripts
+        run: shellcheck -x deploy/scripts/*.sh deploy/aws/*.sh
+      - name: Smoke test parses
+        run: node --check deploy/scripts/smoke.mjs
+      - name: Compose files resolve
+        run: |
+          deploy/scripts/init-env.sh deploy/.env.production.example /tmp/prod.env
+          docker compose -f docker-compose.prod.yml --env-file /tmp/prod.env config --quiet
+          AWS_REGION=ap-south-1 docker compose -f docker-compose.prod.yml -f deploy/docker-compose.cloudwatch.yml --env-file /tmp/prod.env config --quiet
+          deploy/scripts/init-env.sh --local deploy/.env.local.example /tmp/local.env
+          docker compose -f docker-compose.prod.yml -f deploy/docker-compose.local.yml --env-file /tmp/local.env config --quiet
+      - name: No secret is committed
+        run: |
+          ! git ls-files | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -vE '\.example$'
+          ! git grep -nE 'AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' -- . ':!.github/workflows/ci.yml'
+
+  stack:
+    name: Production stack smoke test
+    runs-on: ubuntu-latest
+    needs: [server, client, deploy-files]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The same images and Compose file as production, with TLS, an S3 stand-in, the built
+      # client on its own origin, and a Random Forest artifact rebuilt with the model
+      # repository's own pipeline (deploy/model/build_local_artifact.py).
+      - name: Start the stack
+        run: deploy/scripts/local-stack.sh up
+      - name: Smoke test, including the full citizen workflow and model assessments
+        run: deploy/scripts/local-stack.sh smoke
+      - name: Logs on failure
+        if: failure()
+        run: deploy/scripts/local-stack.sh logs --tail 80

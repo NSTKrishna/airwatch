@@ -1,9 +1,20 @@
-# Production stack for one EC2 host:
+# Production stack for one small Linux host (Amazon Lightsail in docs/DEPLOY_AWS.md):
 #   docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
 #
 # Public:  caddy (80/443, HTTPS) -> api
-# Private: api, worker, model, db (no published ports; model and db have no route to the internet)
+# Private: api, worker, model, db. None of them publishes a port. The model and the database
+#          sit on a network with no route to the internet; only the API can reach out (to S3).
 name: airwatch
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-api-image: &api-image
+  image: airwatch-api:${RELEASE:-local}
+  build: ./server
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -15,11 +26,23 @@ x-app-env: &app-env
   WEATHER_PROVIDER: ${WEATHER_PROVIDER:-simulated}
   SIMULATOR_TOKEN_SECRET: ${SIMULATOR_TOKEN_SECRET}
   SIMULATOR_SEED: ${SIMULATOR_SEED:-airwatch-demo}
+  # Uploaded photographs: "database" (nothing else needed) or "s3" (private bucket).
+  ATTACHMENT_STORAGE: ${ATTACHMENT_STORAGE:-database}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_REGION: ${AWS_REGION:-}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+  # A Lightsail instance cannot take an IAM role of your own, so the S3 key is passed in.
+  # Without it the SDK finds Lightsail's own instance role, which has no access to the bucket.
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Sized for a 2 GB host shared with four other containers.
+    command: ["postgres", "-c", "shared_buffers=96MB", "-c", "max_connections=40"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -31,20 +54,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    mem_limit: 384m
+    logging: *logging
     networks: [private]
 
   model:
+    image: airwatch-model:${RELEASE:-local}
     build:
       context: ./adaptive-aqi-model
       dockerfile: ../deploy/model.Dockerfile
     restart: unless-stopped
+    environment:
+      # Which serving configuration (and so which artifact) to load, relative to /app.
+      AQI_CONFIG_PATH: ${MODEL_CONFIG_PATH:-configs/config.yaml}
     volumes:
       # The trained artifact, copied to the host separately. Read-only.
-      - ./adaptive-aqi-model/models:/app/models:ro
+      - ${MODEL_DIR:-./adaptive-aqi-model/models}:/app/models:ro
+    mem_limit: 640m
+    logging: *logging
     networks: [private]
 
   migrate:
-    build: ./server
+    <<: *api-image
     command: ["sh", "-c", "npx prisma migrate deploy && node prisma/seed.js"]
     restart: "no"
     environment:
@@ -55,10 +86,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    logging: *logging
     networks: [private]
 
   api:
-    build: ./server
+    <<: *api-image
     restart: unless-stopped
     environment:
       <<: *app-env
@@ -68,15 +100,18 @@ services:
         condition: service_completed_successfully
       model:
         condition: service_started
+    mem_limit: 384m
+    logging: *logging
     networks: [private, edge]
 
   # Device simulator: uploads to the API over HTTP with device credentials, like field devices.
   worker:
-    build: ./server
+    <<: *api-image
     command: ["node", "src/worker.js"]
     restart: unless-stopped
     environment:
       <<: *app-env
+      ATTACHMENT_STORAGE: database
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
       SIMULATOR_INGEST_URL: http://api:4000
       SIMULATOR_BATCH_MINUTES: ${SIMULATOR_BATCH_MINUTES:-1}
@@ -85,14 +120,16 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    mem_limit: 256m
+    logging: *logging
     networks: [private]
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       API_DOMAIN: ${API_DOMAIN}
     volumes:
@@ -102,6 +139,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    mem_limit: 128m
+    logging: *logging
     networks: [edge]
 
 volumes:

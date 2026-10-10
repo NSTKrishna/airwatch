@@ -1,0 +1,38 @@
+# Overlay for running the production stack on a workstation or CI runner, as close to the
+# deployed shape as it gets without AWS:
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.local.yml --env-file deploy/.env.local up -d --build
+#
+# - Caddy still terminates TLS (its own local CA issues a certificate for "localhost").
+# - S3Mock stands in for the S3 bucket, so photographs take the object-storage path.
+# - `web` serves the built client from a second origin, the way Amplify does, so the browser
+#   calls the API across origins exactly as in production.
+services:
+  # Accepts any credentials and keeps objects only as long as the container lives.
+  objects:
+    image: adobe/s3mock:4.7.0
+    restart: unless-stopped
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/${S3_BUCKET}"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    networks: [edge]
+
+  api:
+    depends_on:
+      objects:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./client
+      dockerfile: ../deploy/web.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${PUBLIC_API_URL}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    networks: [edge]
+

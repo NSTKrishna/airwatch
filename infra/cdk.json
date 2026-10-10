@@ -1,0 +1,7 @@
+{
+  "app": "node bin/airwatch.mjs",
+  "context": {
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}
