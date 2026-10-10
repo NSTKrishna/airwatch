@@ -52,7 +52,7 @@ export default function PublicLayout() {
 
       <main className={`min-h-0 flex-1 ${onMap ? 'relative' : 'overflow-y-auto'}`}>
         <Suspense fallback={<div className="mx-auto max-w-2xl space-y-3 p-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-40" /></div>}>
-          {onMap ? <Outlet /> : <div className="mx-auto max-w-5xl px-4 py-5 md:py-8"><Outlet /></div>}
+          {onMap ? <Outlet /> : <div className="mx-auto max-w-6xl px-4 py-5 md:px-6 md:py-8"><Outlet /></div>}
         </Suspense>
       </main>
 

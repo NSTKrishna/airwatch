@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, CircleCheck, HardHat, ImagePlus, LocateFixed, Search, Send, X } from 'lucide-react';
+import { Building2, Check, CircleCheck, CircleDashed, HardHat, ImagePlus, LocateFixed, Search, Send, ShieldCheck, X } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
 import { fmtNumber } from '../../lib/format.js';
-import { Button, FormField, LoadError, Notice, Panel } from '../../components/ui.jsx';
+import PlaceMap from '../../components/PlaceMap.jsx';
+import { Button, FoldPanel, FormField, LoadError, Notice, Panel } from '../../components/ui.jsx';
 
 const MAX_PHOTOS = 4;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -19,6 +20,21 @@ function Choice({ checked, onChange, name, value, title, detail }) {
         {detail ? <span className="num block text-[0.8125rem] text-ink-2">{detail}</span> : null}
       </span>
     </label>
+  );
+}
+
+/** A numbered section of the form. The number turns into a tick once the section is filled in. */
+function StepPanel({ n, title, done, children }) {
+  return (
+    <Panel className="p-4 sm:p-5">
+      <h2 className="mb-4 flex items-center gap-2.5 font-semibold">
+        <span className={`num grid size-6 shrink-0 place-items-center rounded-full border text-[0.75rem] ${done ? 'border-[#bfdcc8] bg-ok-soft text-ok' : 'border-ink bg-ink text-white'}`} aria-hidden>
+          {done ? <Check className="size-3.5" strokeWidth={3} /> : n}
+        </span>
+        {title}
+      </h2>
+      {children}
+    </Panel>
   );
 }
 
@@ -122,20 +138,29 @@ export default function ReportForm() {
   const failed = [overview, projects].find((r) => r.error && !r.data);
   if (failed) return <LoadError error={failed.error} onRetry={failed.reload} />;
   const whereError = state.fields.projectCode || state.fields.latitude || state.fields.wardSlug;
+  const ready = {
+    place: Boolean(project || (coords && place?.ward?.pilot) || (wardSlug && locationText.trim())),
+    photo: photos.length > 0,
+    text: description.trim().length >= 10,
+  };
+  const pilotCodes = pilotWards.map((w) => w.code);
 
   return (
-    <div className="mx-auto max-w-xl">
-      <h1 className="text-2xl font-semibold tracking-tight">{t('report.title')}</h1>
-      <p className="mt-1.5 text-ink-2">{t('report.intro')}</p>
-      <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-mute-soft px-2 py-1 text-[0.8125rem] text-ink-2">
-        <HardHat className="size-3.5" aria-hidden />{t('report.onlyCategory')}
-      </p>
+    <div>
+      <header className="max-w-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight">{t('report.title')}</h1>
+        <p className="mt-1.5 text-ink-2">{t('report.intro')}</p>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-mute-soft px-2 py-1 text-[0.8125rem] text-ink-2">
+          <HardHat className="size-3.5" aria-hidden />{t('report.onlyCategory')}
+        </p>
+      </header>
 
-      <form className="mt-5 space-y-5" noValidate onSubmit={submit}>
+      <form className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6" noValidate onSubmit={submit}>
+        <div className="space-y-5">
         {state.error ? <Notice tone="flag" title={state.error} /> : null}
 
-        <Panel className="space-y-4 p-4 sm:p-5">
-          <h2 className="font-semibold">{t('report.whereHeading')}</h2>
+        <StepPanel n={1} title={t('report.whereHeading')} done={ready.place}>
+          <div className="space-y-4">
 
           {project ? (
             <div className="flex items-start gap-3 rounded-lg border border-accent bg-accent-soft/60 px-3 py-2.5">
@@ -217,16 +242,17 @@ export default function ReportForm() {
           </FormField>
 
           {ward?.pilot ? (
-            <div className="rounded-lg bg-mute-soft px-3 py-2.5 text-[0.875rem]">
+            <div className="rounded-lg bg-mute-soft px-3 py-2.5 text-[0.875rem] lg:hidden">
               <p className="font-medium">{t('report.routedTo', { ward: ward.name })}</p>
               {ward.office?.address ? <p className="mt-0.5 text-ink-2">{ward.office.address}</p> : null}
               <p className="mt-1.5 text-[0.8125rem] text-ink-2">{t('report.routedNote')}</p>
             </div>
           ) : null}
-        </Panel>
+          </div>
+        </StepPanel>
 
-        <Panel className="p-4 sm:p-5">
-          <FormField label={t('report.photos')} htmlFor="photos" hint={t('report.photosHint')} error={state.fields.photos || photoError}>
+        <StepPanel n={2} title={t('report.photos')} done={ready.photo}>
+          <FormField label={t('report.photosLabel')} htmlFor="photos" hint={t('report.photosHint')} error={state.fields.photos || photoError}>
             <input ref={fileInput} id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only"
               aria-invalid={Boolean(state.fields.photos)} onChange={(e) => addPhotos(e.target.files)} />
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -250,18 +276,64 @@ export default function ReportForm() {
             </ul>
           </FormField>
           <p className="mt-3 text-[0.8125rem] text-ink-2">{t('report.photosPublic')}</p>
-        </Panel>
+        </StepPanel>
 
-        <Panel className="p-4 sm:p-5">
-          <FormField label={t('report.description')} htmlFor="description" error={state.fields.description}>
+        <StepPanel n={3} title={t('report.description')} done={ready.text}>
+          <FormField label={t('report.descriptionLabel')} htmlFor="description" error={state.fields.description}>
             <textarea id="description" rows={4} maxLength={2000} required className="field resize-y" value={description}
               placeholder={t('report.descriptionPlaceholder')} aria-invalid={Boolean(state.fields.description)}
               onChange={(e) => setDescription(e.target.value)} />
           </FormField>
-        </Panel>
+        </StepPanel>
 
-        <Button type="submit" size="lg" block icon={Send} loading={state.busy} disabled={outsidePilot}>{state.busy ? t('report.submitting') : t('report.submit')}</Button>
-        <p className="text-center text-[0.8125rem] text-ink-2">{t('pub.notOfficial')}</p>
+        <div className="lg:flex lg:items-center lg:gap-5">
+          <Button type="submit" size="lg" icon={Send} loading={state.busy} disabled={outsidePilot} className="w-full lg:w-auto lg:min-w-56">{state.busy ? t('report.submitting') : t('report.submit')}</Button>
+          <p className="mt-3 text-center text-[0.8125rem] text-ink-2 lg:mt-0 lg:text-left">{t('pub.notOfficial')}</p>
+        </div>
+        </div>
+
+        <aside className="mt-5 space-y-5 lg:sticky lg:top-0 lg:mt-0">
+          <Panel className="p-4 max-lg:hidden sm:p-5">
+            <h2 className="font-semibold">{t('report.aside.goes')}</h2>
+            <div className="mt-3">
+              <PlaceMap label={t('report.mapLabel')} className="h-44" wardCode={ward?.pilot ? ward.code : null} pilotCodes={pilotCodes}
+                project={project} report={!project && coords ? { ...coords, status: 'SUBMITTED' } : null} />
+            </div>
+            {ward?.pilot ? (
+              <div className="mt-3 text-[0.875rem]">
+                <p className="font-medium">{t('report.routedTo', { ward: ward.name })}</p>
+                {ward.office?.address ? <p className="mt-0.5 text-ink-2">{ward.office.address}</p> : null}
+                <p className="mt-1.5 text-[0.8125rem] text-ink-2">{t('report.routedNote')}</p>
+              </div>
+            ) : <p className="mt-3 text-[0.875rem] text-ink-2">{t('report.aside.pick')}</p>}
+          </Panel>
+
+          <Panel className="p-4 max-lg:hidden sm:p-5">
+            <h2 className="font-semibold">{t('report.ready.title')}</h2>
+            <ul className="mt-2.5 space-y-1.5 text-[0.875rem]">
+              {[['place', 'report.ready.place'], ['photo', 'report.ready.photo'], ['text', 'report.ready.text']].map(([key, label]) => (
+                <li key={key} className={`flex items-center gap-2 ${ready[key] ? 'text-ok' : 'text-ink-2'}`}>
+                  {ready[key] ? <CircleCheck className="size-4 shrink-0" aria-hidden /> : <CircleDashed className="size-4 shrink-0" aria-hidden />}
+                  <span className={ready[key] ? 'font-medium' : ''}>{t(label)}</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+
+          <FoldPanel defaultOpen={false} title={t('report.next.title')}>
+            <ol className="space-y-2.5 text-[0.875rem]">
+              {['report.next.1', 'report.next.2', 'report.next.3'].map((key, i) => (
+                <li key={key} className="grid grid-cols-[1.5rem_1fr] gap-x-2">
+                  <span className="num grid size-5.5 place-items-center rounded-full border border-line-strong text-[0.75rem] font-semibold text-ink-2" aria-hidden>{i + 1}</span>
+                  <span className="text-ink-2">{t(key)}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-3 text-[0.8125rem] text-ink-2">
+              <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('report.privacy')}
+            </p>
+          </FoldPanel>
+        </aside>
       </form>
     </div>
   );

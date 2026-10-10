@@ -55,8 +55,8 @@ export function ReadingComparison({ background, site, pm25, evaluation }) {
   const n = (v) => fmtNumber(v, 1, locale);
   const evaluated = evaluation?.status === 'EVALUATED';
   return (
-    <div>
-      <dl className={`grid grid-cols-2 gap-x-4 gap-y-4 ${pm25 === undefined ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+    <div className="@container">
+      <dl className={`grid grid-cols-2 gap-x-4 gap-y-4 ${pm25 === undefined ? '@md:grid-cols-4' : '@md:grid-cols-3'}`}>
         <Metric strong label={t('monitor.site')} value={n(site)} unit={typeof site === 'number' ? unit : null} />
         {pm25 === undefined ? null : <Metric strong label={t('monitor.pm25')} value={n(pm25)} unit={typeof pm25 === 'number' ? unit : null} help={t('monitor.pm25Note')} />}
         <Metric strong label={t('monitor.background')} value={n(background)} unit={typeof background === 'number' ? unit : null} />

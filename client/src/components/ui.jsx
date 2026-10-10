@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import {
-  CircleCheck, CircleDashed, CircleX, ClipboardCheck, Eye, FlaskConical, Inbox, LoaderCircle, RadioTower, TriangleAlert,
+  ChevronDown, CircleCheck, CircleDashed, CircleX, ClipboardCheck, Eye, FlaskConical, Inbox, LoaderCircle, RadioTower, TriangleAlert,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useI18n } from '../lib/i18n.jsx';
@@ -32,6 +32,50 @@ export function Panel({ as: Tag = 'section', className = '', children, ...props 
     <Tag {...props} className={`rounded-(--radius-card) border border-line bg-surface shadow-(--shadow-card) ${className}`}>
       {children}
     </Tag>
+  );
+}
+
+/** Whether the viewport is at least Tailwind's `lg` wide: two columns instead of one. */
+export function useWide() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia('(min-width: 64rem)');
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia('(min-width: 64rem)').matches,
+    () => true);
+}
+
+/**
+ * A titled card. On a phone it folds down to its heading so a long page stays scannable;
+ * on a wide screen it is always open. `summary` is what a folded card still says.
+ */
+export function FoldPanel({ title, summary, aside, defaultOpen = true, children, className = '', bodyClassName = '', ...props }) {
+  const wide = useWide();
+  const [open, setOpen] = useState(defaultOpen);
+  const bodyId = useId();
+  const shown = wide || open;
+  return (
+    <Panel {...props} className={`scroll-mt-4 ${className}`}>
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5 px-4 pt-4 sm:px-5">
+        <h2 className="min-w-0 flex-1 basis-40 font-semibold">
+          {wide ? title : (
+            <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}
+              className="-my-2 flex min-h-11 w-full items-center gap-2 text-left">
+              <span className="min-w-0 flex-1">
+                {title}
+                {summary && !open ? <span className="mt-0.5 block text-[0.8125rem] font-normal text-ink-2">{summary}</span> : null}
+              </span>
+              <ChevronDown className={`size-5 shrink-0 text-ink-2 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} aria-hidden />
+            </button>
+          )}
+        </h2>
+        {shown ? aside : null}
+      </div>
+      <div id={bodyId} hidden={!shown} className={`px-4 pt-3 pb-4 sm:px-5 sm:pb-5 ${bodyClassName}`}>{children}</div>
+      {shown ? null : <div className="pb-4" />}
+    </Panel>
   );
 }
 
