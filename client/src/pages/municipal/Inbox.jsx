@@ -7,7 +7,7 @@ import { Button, EmptyState, LoadError, Panel, Skeleton, StatusPill } from '../.
 
 const STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'INSPECTION_ASSIGNED', 'RESOLVED', 'REJECTED'];
 const STATUS_LABEL = { SUBMITTED: 'Submitted', UNDER_REVIEW: 'Under review', INSPECTION_ASSIGNED: 'Inspection assigned', RESOLVED: 'Resolved', REJECTED: 'Rejected' };
-const FILTER_KEYS = ['q', 'status', 'ward', 'locality', 'assignee', 'anomaly'];
+const FILTER_KEYS = ['q', 'status', 'ward', 'locality', 'assignee', 'anomaly', 'followUp'];
 const PAGE_SIZE = 20;
 
 function Select({ label, value, onChange, children }) {
@@ -62,7 +62,7 @@ export default function Inbox() {
         {data ? <p className="num text-[0.875rem] text-ink-2">{data.total} {data.total === 1 ? 'complaint' : 'complaints'}{activeFilters ? ' match' : ''}</p> : null}
       </div>
 
-      <Panel className="mt-4 grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] lg:items-end">
+      <Panel className="mt-4 grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] lg:items-end">
         <label className="block sm:col-span-2 lg:col-span-1">
           <span className="mb-1 block text-[0.75rem] font-medium text-ink-2">Search</span>
           <span className="relative block">
@@ -89,6 +89,11 @@ export default function Inbox() {
           <option value="">Any</option>
           <option value="yes">Anomaly attached</option>
           <option value="no">No anomaly attached</option>
+        </Select>
+        <Select label="Citizen follow-up" value={params.get('followUp') || ''} onChange={(v) => setFilter('followUp', v)}>
+          <option value="">Any</option>
+          <option value="unchecked">Evidence to check</option>
+          <option value="disputed">Closure disputed</option>
         </Select>
         <Button variant="ghost" icon={X} disabled={!activeFilters} onClick={() => { setSearch(''); setParams({}, { replace: true }); }}>Clear</Button>
       </Panel>
@@ -135,7 +140,11 @@ export default function Inbox() {
                             </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">{c.assignedOfficer?.name || <span className="text-ink-3">Unassigned</span>}</td>
-                          <td className="px-4 py-3"><StatusPill status={c.status} /></td>
+                          <td className="px-4 py-3">
+                            <StatusPill status={c.status} />
+                            {c.positions?.unchecked ? <p className="num mt-1 text-[0.75rem] font-medium whitespace-nowrap text-warn">{c.positions.unchecked} follow-up{c.positions.unchecked === 1 ? '' : 's'} to check</p> : null}
+                            {c.positions?.citizen.contradictsClosure || c.positions?.citizen.state === 'DISPUTED' ? <p className="mt-1 text-[0.75rem] font-medium whitespace-nowrap text-report">Closure disputed</p> : null}
+                          </td>
                           <td className="num px-4 py-3 whitespace-nowrap text-ink-2">{fmtDateTime(c.createdAt)}</td>
                         </tr>
                       ))}

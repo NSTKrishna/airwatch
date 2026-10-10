@@ -12,9 +12,10 @@ import { DUST_AUTHORITY } from '../data/pilot.js';
 import { prisma } from '../db.js';
 import { notFound } from '../lib/errors.js';
 import { parse } from '../middleware/validate.js';
+import { outcomeCounts } from '../services/followUps.js';
 import { systemStatus } from '../services/status.js';
 import {
-  complaintDetailInclude, complaintPublicView, projectRecord, publicComplaintWhere, representativeView, siteHistory, sitesWithLatest, wardView,
+  complaintDetailInclude, complaintListInclude, complaintPublicView, projectRecord, publicComplaintWhere, representativeView, siteHistory, sitesWithLatest, wardView,
 } from '../services/views.js';
 import { boundaryCollection, boundarySource, distanceM, wardCodeAt } from '../services/wards.js';
 
@@ -44,10 +45,11 @@ async function monitorsByProject(where = {}) {
 const projectWithMonitor = (project, monitors) => ({ ...projectRecord(project), monitor: monitors.get(project.code) ?? null });
 
 async function wardCounts() {
-  const [projects, monitors, reports] = await Promise.all([
+  const [projects, monitors, reports, cases] = await Promise.all([
     prisma.project.groupBy({ by: ['wardId'], where: { active: true }, _count: { _all: true } }),
     sitesWithLatest({ projectId: { not: null } }, audience),
     prisma.complaint.groupBy({ by: ['wardId', 'status'], where: publicComplaintWhere, _count: { _all: true } }),
+    prisma.complaint.findMany({ where: publicComplaintWhere, select: { wardId: true, status: true, followUps: true, events: complaintListInclude.events } }),
   ]);
   const counts = new Map();
   const of = (wardId) => {
@@ -61,11 +63,15 @@ async function wardCounts() {
     if (OPEN.includes(row.status)) c.openReports += row._count._all;
     if (row.status === 'RESOLVED') c.resolvedReports += row._count._all;
   }
-  return { counts, monitors };
+  // What happened after the reports were filed, per ward.
+  const byWard = new Map();
+  for (const c of cases) byWard.set(c.wardId, [...(byWard.get(c.wardId) || []), c]);
+  for (const [wardId, list] of byWard) of(wardId).outcomes = outcomeCounts(list);
+  return { counts, monitors, outcomes: outcomeCounts(cases) };
 }
 
 router.get('/overview', async (_req, res) => {
-  const [wards, status, { counts, monitors }] = await Promise.all([
+  const [wards, status, { counts, monitors, outcomes }] = await Promise.all([
     prisma.ward.findMany({ orderBy: { code: 'asc' } }),
     systemStatus(),
     wardCounts(),
@@ -90,6 +96,7 @@ router.get('/overview', async (_req, res) => {
     official: false,
     wards: rows,
     totals,
+    outcomes,
     model: { ready: status.model.ready, version: status.model.version, scope: status.model.scope, limitations: status.model.limitations },
     sensors: status.sensors,
     dustAuthority: DUST_AUTHORITY,
@@ -109,7 +116,7 @@ router.get('/wards/:slug', async (req, res) => {
     prisma.project.findMany({ where: { wardId: ward.id, active: true }, include: { ward: true }, orderBy: { code: 'asc' } }),
     monitorsByProject({ project: { wardId: ward.id } }),
     prisma.complaint.findMany({
-      where: { ...publicComplaintWhere, wardId: ward.id }, include: { ward: true, project: true, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
+      where: { ...publicComplaintWhere, wardId: ward.id }, include: { ...complaintListInclude, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
       orderBy: { createdAt: 'desc' }, take: 100,
     }),
   ]);
@@ -145,7 +152,7 @@ router.get('/projects/:code', async (req, res) => {
   const [monitors, reports] = await Promise.all([
     monitorsByProject({ projectId: project.id }),
     prisma.complaint.findMany({
-      where: { ...publicComplaintWhere, projectId: project.id }, include: { ward: true, project: true, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
+      where: { ...publicComplaintWhere, projectId: project.id }, include: { ...complaintListInclude, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
       orderBy: { createdAt: 'desc' }, take: 50,
     }),
   ]);
@@ -174,7 +181,7 @@ router.get('/reports', async (req, res) => {
   if (query.project) where.project = { code: query.project };
   if (query.status) where.status = query.status;
   const reports = await prisma.complaint.findMany({
-    where, include: { ward: true, project: true, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
+    where, include: { ...complaintListInclude, _count: { select: { attachments: { where: { kind: 'CITIZEN_PHOTO' } } } } },
     orderBy: { createdAt: 'desc' }, take: 500,
   });
   res.json({ reports: reports.map((c) => complaintPublicView(c)) });
@@ -210,20 +217,28 @@ router.get('/locate', async (req, res) => {
   });
 });
 
-// A citizen's photograph is public only once the report is under review and not hidden.
+// A citizen's photograph is public only once the report is under review and not hidden, and a
+// follow-up photograph only once a moderator has verified that follow-up. An acknowledgment
+// document is never served here.
 router.get('/attachments/:id', async (req, res) => {
   const attachment = await prisma.attachment.findFirst({
-    where: { id: req.params.id, kind: 'CITIZEN_PHOTO', complaint: { ...publicComplaintWhere, status: { not: 'SUBMITTED' } } },
+    where: {
+      id: req.params.id,
+      complaint: publicComplaintWhere,
+      OR: [
+        { kind: 'CITIZEN_PHOTO', complaint: { status: { not: 'SUBMITTED' } } },
+        { kind: 'FOLLOW_UP_PHOTO', followUp: { check: 'VERIFIED' } },
+      ],
+    },
   });
   if (!attachment) throw notFound('Attachment not found');
-  res.set({
-    'Content-Type': attachment.mimeType,
-    'Content-Length': String(attachment.sizeBytes),
-    'Content-Disposition': 'inline',
-    'X-Content-Type-Options': 'nosniff',
-    'Cache-Control': 'public, max-age=3600',
-  });
-  res.end(Buffer.from(attachment.data));
+  // The browser must ask again each time, so a photograph stops being served the moment its
+  // report is hidden or its follow-up is set aside. The check above runs before any 304.
+  const etag = `"${attachment.id}"`;
+  res.set({ 'Cache-Control': 'no-cache', ETag: etag, 'X-Content-Type-Options': 'nosniff' });
+  if (req.get('if-none-match') === etag) return res.status(304).end();
+  res.set({ 'Content-Type': attachment.mimeType, 'Content-Length': String(attachment.sizeBytes), 'Content-Disposition': 'inline' });
+  return res.end(Buffer.from(attachment.data));
 });
 
 export default router;

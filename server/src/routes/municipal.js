@@ -10,9 +10,10 @@ import {
   STATUSES, TRANSITIONS, addEvidence, addNote, assignOfficer, changeStatus, setVisibility, updateFindings,
 } from '../services/complaints.js';
 import { deviceView, generateToken, hashToken, tokenHint } from '../services/devices.js';
+import { checkFollowUp } from '../services/followUps.js';
 import { SCENARIOS, publishSimulatedReadings } from '../services/mockSensorProvider.js';
 import { sourcesSummary } from '../services/monitoring.js';
-import { complaintDetailInclude, complaintMunicipalView, sitesWithLatest } from '../services/views.js';
+import { complaintDetailInclude, complaintListInclude, complaintMunicipalView, sitesWithLatest } from '../services/views.js';
 
 const router = Router();
 
@@ -32,6 +33,7 @@ router.get('/summary', async (_req, res) => {
     resolvedCases: counts.RESOLVED,
     rejectedCases: counts.REJECTED,
     byStatus: counts,
+    followUpsToCheck: await prisma.followUp.count({ where: { check: 'UNCHECKED' } }),
     monitoredSites: sites.length,
     sitesWithoutAssessment: sites.filter((s) => s.latest?.evaluation?.status !== 'EVALUATED').length,
     devices: {
@@ -66,6 +68,8 @@ const listQuery = z.object({
   ward: z.string().optional(), // ward slug
   assignee: z.string().optional(), // "me", "unassigned" or an officer id
   anomaly: z.enum(['yes', 'no']).optional(),
+  // Citizen follow-up: evidence waiting for a moderator, or a closure a resident disputes.
+  followUp: z.enum(['unchecked', 'disputed']).optional(),
   q: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -81,6 +85,8 @@ router.get('/complaints', async (req, res) => {
   else if (query.assignee === 'unassigned') where.assignedOfficerId = null;
   else if (query.assignee) where.assignedOfficerId = query.assignee;
   if (query.anomaly) where.anomalyEvaluationId = query.anomaly === 'yes' ? { not: null } : null;
+  if (query.followUp === 'unchecked') where.followUps = { some: { check: 'UNCHECKED' } };
+  if (query.followUp === 'disputed') where.followUps = { some: { kind: 'DISPUTE_CLOSURE', check: { not: 'SET_ASIDE' } } };
   if (query.q) {
     const contains = { contains: query.q, mode: 'insensitive' };
     const or = [
@@ -99,7 +105,7 @@ router.get('/complaints', async (req, res) => {
     prisma.complaint.count({ where }),
     prisma.complaint.findMany({
       where,
-      include: { locality: true, site: true, ward: true, project: true, citizen: true, assignedOfficer: true, _count: { select: { attachments: true } } },
+      include: { ...complaintListInclude, citizen: true, assignedOfficer: true, _count: { select: { attachments: true } } },
       orderBy: { createdAt: 'desc' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -144,6 +150,14 @@ router.post('/complaints/:id/notes', async (req, res) => {
   const { note } = parse(z.object({ note: z.string().trim().min(1, 'Write a note').max(2000) }), req.body);
   await addNote(req.params.id, req.user, note);
   await sendDetail(res, req.params.id, 201);
+});
+
+// A moderator's check of evidence a citizen submitted from outside AirWatch: an official
+// acknowledgment, an official response, or what they saw on site. It does not change the case status.
+router.post('/follow-ups/:id/check', async (req, res) => {
+  const input = parse(z.object({ check: z.enum(['VERIFIED', 'SET_ASIDE']), note: text(500) }), req.body);
+  const complaintId = await checkFollowUp(req.params.id, req.user, input);
+  await sendDetail(res, complaintId);
 });
 
 // Moderation of what the public map shows. It does not change the case or its status.

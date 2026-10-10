@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 760" width="1300" height="760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs><marker id="arrow" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><polygon points="0,0 12,5 0,10" fill="#16201e"/></marker></defs>
+  <rect x="0" y="0" width="1300" height="760" fill="#ffffff"/>
+  <text x="30" y="46" font-size="24" font-weight="700" fill="#16201e">One case, three positions. Each is set by different people and none overwrites another.</text>
+  <rect x="30" y="76" width="1240" height="170" rx="12" fill="#f5f4ef" stroke="#5f6a67" stroke-width="2"/>
+  <text x="50" y="114" font-size="20" font-weight="700" fill="#16201e">AirWatch review</text>
+  <text x="50" y="140" font-size="18" fill="#44504d">Set by the AirWatch</text>
+  <text x="50" y="164" font-size="18" fill="#44504d">case desk</text>
+  <rect x="300" y="98" width="170" height="64" rx="32" fill="#ffffff" stroke="#5f6a67" stroke-width="2"/>
+  <text x="385" y="136" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Submitted</text>
+  <line x1="472" y1="130" x2="546" y2="130" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="510" y="120" font-size="16" text-anchor="middle" fill="#16201e">case desk</text>
+  <rect x="550" y="98" width="170" height="64" rx="32" fill="#ffffff" stroke="#5f6a67" stroke-width="2"/>
+  <text x="635" y="136" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Under review</text>
+  <line x1="722" y1="130" x2="796" y2="130" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="760" y="120" font-size="16" text-anchor="middle" fill="#16201e">case desk</text>
+  <rect x="800" y="98" width="170" height="64" rx="32" fill="#ffffff" stroke="#5f6a67" stroke-width="2"/>
+  <text x="885" y="126" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Inspection</text>
+  <text x="885" y="148" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">assigned</text>
+  <line x1="972" y1="130" x2="1046" y2="130" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1010" y="120" font-size="16" text-anchor="middle" fill="#16201e">case desk</text>
+  <rect x="1050" y="98" width="170" height="64" rx="32" fill="#ffffff" stroke="#5f6a67" stroke-width="2"/>
+  <text x="1135" y="126" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Resolved</text>
+  <text x="1135" y="148" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">or rejected</text>
+  <text x="300" y="196" font-size="18" fill="#16201e">What AirWatch's own reviewers recorded. It is not a BMC action,</text>
+  <text x="300" y="222" font-size="18" fill="#16201e">and it says nothing about what the site looks like today.</text>
+  <rect x="30" y="264" width="1240" height="170" rx="12" fill="#e0eeeb" stroke="#0b5d57" stroke-width="2"/>
+  <text x="50" y="302" font-size="20" font-weight="700" fill="#084742">Official BMC complaint</text>
+  <text x="50" y="328" font-size="18" fill="#44504d">Set by evidence a</text>
+  <text x="50" y="352" font-size="18" fill="#44504d">citizen submits</text>
+  <rect x="300" y="286" width="170" height="64" rx="32" fill="#ffffff" stroke="#0b5d57" stroke-width="2"/>
+  <text x="385" y="324" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">None recorded</text>
+  <line x1="472" y1="318" x2="546" y2="318" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="510" y="308" font-size="16" text-anchor="middle" fill="#16201e">citizen</text>
+  <rect x="550" y="286" width="170" height="64" rx="32" fill="#ffffff" stroke="#0b5d57" stroke-width="2"/>
+  <text x="635" y="314" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Filed, not</text>
+  <text x="635" y="336" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">yet checked</text>
+  <line x1="722" y1="318" x2="796" y2="318" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="760" y="308" font-size="16" text-anchor="middle" fill="#16201e">moderator</text>
+  <rect x="800" y="286" width="170" height="64" rx="32" fill="#ffffff" stroke="#0b5d57" stroke-width="2"/>
+  <text x="885" y="314" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Acknowledgment</text>
+  <text x="885" y="336" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">on record</text>
+  <line x1="972" y1="318" x2="1046" y2="318" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1010" y="308" font-size="16" text-anchor="middle" fill="#16201e">moderator</text>
+  <rect x="1050" y="286" width="170" height="64" rx="32" fill="#ffffff" stroke="#0b5d57" stroke-width="2"/>
+  <text x="1135" y="314" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Official response</text>
+  <text x="1135" y="336" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">on record</text>
+  <text x="300" y="384" font-size="18" fill="#16201e">The citizen files with BMC themselves and adds the reference and acknowledgment.</text>
+  <text x="300" y="410" font-size="18" fill="#16201e">A moderator checks that evidence. Nobody at BMC has to use AirWatch.</text>
+  <rect x="30" y="452" width="1240" height="170" rx="12" fill="#fdf0e8" stroke="#c2410c" stroke-width="2"/>
+  <text x="50" y="490" font-size="20" font-weight="700" fill="#c2410c">What residents see</text>
+  <text x="50" y="516" font-size="18" fill="#44504d">On site. Set by the</text>
+  <text x="50" y="540" font-size="18" fill="#44504d">latest observation</text>
+  <rect x="300" y="474" width="170" height="64" rx="32" fill="#ffffff" stroke="#c2410c" stroke-width="2"/>
+  <text x="385" y="502" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">No follow-up</text>
+  <text x="385" y="524" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">yet</text>
+  <line x1="472" y1="506" x2="546" y2="506" stroke="#16201e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="510" y="496" font-size="16" text-anchor="middle" fill="#16201e">resident</text>
+  <rect x="550" y="474" width="170" height="64" rx="32" fill="#ffffff" stroke="#c2410c" stroke-width="2"/>
+  <text x="635" y="502" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Dust still</text>
+  <text x="635" y="524" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">reported</text>
+  <text x="760" y="512" font-size="16" text-anchor="middle" fill="#16201e">or</text>
+  <rect x="800" y="474" width="170" height="64" rx="32" fill="#ffffff" stroke="#c2410c" stroke-width="2"/>
+  <text x="885" y="502" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Improvement</text>
+  <text x="885" y="524" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">observed</text>
+  <text x="1010" y="512" font-size="16" text-anchor="middle" fill="#16201e">or</text>
+  <rect x="1050" y="474" width="170" height="64" rx="32" fill="#ffffff" stroke="#c2410c" stroke-width="2"/>
+  <text x="1135" y="502" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">Closure</text>
+  <text x="1135" y="524" font-size="17" font-weight="700" text-anchor="middle" fill="#16201e">disputed</text>
+  <text x="300" y="572" font-size="18" fill="#16201e">Any signed-in resident can add a dated photograph or observation, not only the reporter.</text>
+  <text x="300" y="598" font-size="18" fill="#16201e">A moderator's check marks the evidence as checked. It does not pick the state.</text>
+  <rect x="30" y="644" width="1240" height="92" rx="12" fill="#ffffff" stroke="#16201e" stroke-width="2"/>
+  <text x="50" y="678" font-size="19" font-weight="700" fill="#16201e">Resolved in the top lane changes nothing in the other two.</text>
+  <text x="50" y="708" font-size="18" fill="#16201e">If a resident reports dust after AirWatch closed the case, the public page shows both, with the dispute called out.</text>
+</svg>

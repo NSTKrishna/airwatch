@@ -35,6 +35,8 @@
   --color-warn-soft: #faf0d7;
   --color-warn-line: #ead9a8;
   --color-mute-soft: #eceae3;
+  /* Citizen dust reports on maps: a vermilion that is no status colour and no theme colour. */
+  --color-report: #c2410c;
 
   /* Chart series (validated categorical order). */
   --color-series-1: #2a78d6;
@@ -134,7 +136,8 @@
   animation: sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 @media (prefers-reduced-motion: reduce) {
-  .skeleton, .map-pin-flag, .sheet-in { animation: none !important; }
+  .skeleton, .mk-sensor-flagged, .sheet-in { animation: none !important; }
+  .mk { transition: none; }
 }
 
 /* Horizontal chip rows scroll without showing a bar. */
@@ -163,77 +166,159 @@
 .leaflet-control-attribution {
   font-size: 10px;
 }
-.map-pin {
+/* Tooltips: dark on light, readable over any tile. */
+.leaflet-tooltip {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--color-ink);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-pop);
+}
+.leaflet-tooltip-top::before { border-top-color: var(--color-ink); }
+/* A pale casing keeps ward lines visible where the tiles are dark. */
+.leaflet-container path.ward-line {
+  filter: drop-shadow(0 0 1.5px rgb(255 255 255 / 0.95));
+}
+.leaflet-container path.ward-line:focus-visible {
+  outline: none;
+  stroke: var(--color-ink);
+  stroke-width: 4px;
+}
+/* Map markers (see lib/mapMarkers.js). Shape carries the meaning; colour only reinforces it.
+   Every marker has a white edge and a dark ring so it reads on light and dark tiles alike. */
+.mk-icon {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50% 50% 50% 4px;
-  transform: rotate(-45deg);
+  background: none;
+  border: 0;
+}
+.mk-icon:focus-visible {
+  outline: none;
+}
+.mk {
+  position: relative;
+  display: grid;
+  place-items: center;
   border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgb(22 32 30 / 0.35);
+  box-shadow: 0 0 0 1.5px var(--color-ink), 0 2px 6px rgb(22 32 30 / 0.4);
+  transition: transform 120ms ease-out;
+}
+.mk-icon:hover .mk {
+  transform: scale(1.08);
+}
+/* Selected, or reached with the keyboard: a second ring and a larger marker. */
+.mk-selected, .mk-icon:focus-visible .mk {
+  transform: scale(1.22);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--color-ink), 0 3px 10px rgb(22 32 30 / 0.5);
+}
+.mk-report.mk-selected, .mk-icon:focus-visible .mk-report {
+  transform: rotate(-45deg) scale(1.22);
+}
+
+/* Construction project: a dark square. */
+.mk-project {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--color-ink);
   color: #fff;
 }
-.map-pin > svg {
-  transform: rotate(45deg);
+/* Position known only to the locality: dashed edge, no sensor. */
+.mk-approximate {
+  background: #5f6a67;
+  border-style: dashed;
 }
-.map-pin-flag { background: var(--color-flag); animation: flag-pulse 1.8s ease-out infinite; }
-.map-pin-ok { background: var(--color-ok); }
-.map-pin-none { background: #6b7572; }
-.map-pin-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; }
-.map-station {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  background: #fff;
-  border: 2px solid var(--color-series-1);
-  box-shadow: 0 1px 4px rgb(22 32 30 / 0.3);
+
+/* DEMO sensor status, on the corner of its project. */
+.mk-sensor {
+  position: absolute;
+  top: -9px;
+  right: -9px;
   display: grid;
   place-items: center;
-  color: var(--color-series-1);
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 0 0 1px rgb(22 32 30 / 0.55);
+}
+.mk-sensor-normal { background: var(--color-ok); }
+.mk-sensor-none {
+  background: #fff repeating-linear-gradient(135deg, transparent 0 2px, rgb(22 32 30 / 0.28) 2px 3px);
+  color: var(--color-ink);
+}
+.mk-sensor-flagged {
+  border-radius: 3px;
+  transform: rotate(45deg);
+  background: var(--color-flag);
+  animation: flag-pulse 1.8s ease-out infinite;
+}
+.mk-sensor-flagged > svg { transform: rotate(-45deg); }
+
+/* Citizen dust report: a pin, the largest and warmest thing on the map. */
+.mk-report {
+  width: 32px;
+  height: 32px;
+  border-radius: 50% 50% 50% 3px;
+  transform: rotate(-45deg);
+  transform-origin: 50% 50%;
+}
+.mk-icon:hover .mk-report { transform: rotate(-45deg) scale(1.08); }
+.mk-report-glyph { display: grid; transform: rotate(45deg); }
+.mk-report-open { background: var(--color-report); color: #fff; }
+/* Closed by the AirWatch desk: hollow. */
+.mk-report-resolved { background: #fff; color: var(--color-report); border: 3px solid var(--color-report); }
+.mk-report-rejected { background: #fff; color: var(--color-ink-2); border: 3px solid var(--color-ink-3); }
+/* Residents say the dust is still there. */
+.mk-persists {
+  position: absolute;
+  top: -8px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  transform: rotate(45deg);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--color-ink);
+  color: #fff;
+}
+
+/* Simulated background station (officer maps). */
+.mk-station {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px double var(--color-series-1);
+  background: #fff;
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 4px rgb(22 32 30 / 0.3);
+}
+
+/* Legend swatches reuse the marker classes at a fixed small size. */
+.mk-swatch {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 20px;
+}
+.mk-swatch .mk { transform: scale(0.6); }
+.mk-swatch .mk-report { transform: rotate(-45deg) scale(0.52); }
+.mk-swatch .mk-sensor { position: static; animation: none; }
+.mk-swatch-line {
+  width: 22px;
+  border-top: 2px solid #44504d;
 }
 
 /* Public map. The basemap is quietened so wards, pins and discs carry the colour. */
 .dust-map .leaflet-tile-pane {
   filter: grayscale(0.9) contrast(0.92) brightness(1.06);
 }
-/* A pin is a verified project; its colour is the DEMO monitor's status. */
-.map-pin-plain { background: #fff; color: var(--color-ink); border-color: var(--color-ink); }
-.map-pin-count {
-  position: absolute;
-  top: -7px;
-  right: -9px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  transform: rotate(45deg);
-  border-radius: 9px;
-  border: 2px solid #fff;
-  background: var(--color-ink);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 14px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-/* A citizen report that names no listed project: a disc, never a pin. */
-.map-report {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgb(22 32 30 / 0.35);
-  color: #fff;
-}
-.map-report-SUBMITTED { background: #6b7572; }
-.map-report-UNDER_REVIEW { background: var(--color-accent); }
-.map-report-INSPECTION_ASSIGNED { background: #a36a00; }
-.map-report-RESOLVED { background: var(--color-ok); }
-.map-report-REJECTED { background: #fff; color: var(--color-ink-2); border-color: var(--color-ink-3); }
-.map-report-selected, .map-ward-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; }
 /* Ward summary shown while zoomed out, in place of individual pins. */
 .map-ward {
   display: inline-flex;
@@ -258,6 +343,7 @@
   text-align: right;
   transform: translate(calc(-100% + 22px), -50%);
 }
+.map-ward-selected { outline: 3px solid var(--color-ink); outline-offset: 2px; }
 .map-ward b {
   display: grid;
   place-items: center;
@@ -265,7 +351,7 @@
   height: 28px;
   padding: 0 7px;
   border-radius: 999px;
-  background: var(--color-accent);
+  background: var(--color-ink);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -273,6 +359,9 @@
 .map-ward span { display: block; color: var(--color-ink-2); font-variant-numeric: tabular-nums; }
 .map-ward strong { display: block; font-weight: 600; color: var(--color-ink); }
 .leaflet-container .leaflet-control-zoom a {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
   color: var(--color-ink);
   border-color: var(--color-line);
 }

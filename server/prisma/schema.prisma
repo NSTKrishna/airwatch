@@ -49,6 +49,10 @@ enum ReadingQuality {
 enum AttachmentKind {
   CITIZEN_PHOTO
   INSPECTION_EVIDENCE
+  // Photograph added with a citizen follow-up. Public once a moderator has checked it.
+  FOLLOW_UP_PHOTO
+  // Screenshot or scan of an official acknowledgment. Never public: it can carry personal details.
+  OFFICIAL_ACKNOWLEDGMENT
 }
 
 enum ComplaintEventType {
@@ -59,6 +63,27 @@ enum ComplaintEventType {
   EVIDENCE_UPLOADED
   FINDINGS_UPDATED
   VISIBILITY_CHANGED
+  FOLLOW_UP_ADDED
+  FOLLOW_UP_CHECKED
+}
+
+// What a citizen adds to a case after reporting it. None of these changes the AirWatch
+// review status: they are the independent side of the record.
+enum FollowUpKind {
+  OFFICIAL_COMPLAINT   // filed with BMC through an official channel: reference, date, acknowledgment
+  OFFICIAL_RESPONSE    // a reply or action from BMC, as received by the citizen
+  STILL_UNRESOLVED     // observed on site: the dust persists
+  IMPROVEMENT_OBSERVED // observed on site: conditions improved
+  DISPUTE_CLOSURE      // disagrees with how AirWatch closed the case
+  NOTE
+}
+
+// Whether a moderator has looked at a follow-up's evidence. VERIFIED means the evidence
+// supports what the citizen states; it never means BMC confirmed anything to AirWatch.
+enum EvidenceCheck {
+  UNCHECKED
+  VERIFIED
+  SET_ASIDE
 }
 
 enum RepresentativeRole {
@@ -80,6 +105,8 @@ model User {
   events             ComplaintEvent[]
   attachments        Attachment[]
   registeredDevices  Device[]
+  followUps          FollowUp[]       @relation("FollowUpAuthor")
+  checkedFollowUps   FollowUp[]       @relation("FollowUpChecker")
 }
 
 // BMC administrative ward. Reference data: every fact comes from a cited public source
@@ -476,6 +503,7 @@ model Complaint {
   anomalyEvaluation AnomalyEvaluation? @relation(fields: [anomalyEvaluationId], references: [id])
   attachments       Attachment[]
   events            ComplaintEvent[]
+  followUps         FollowUp[]
 
   @@index([citizenId, createdAt])
   @@index([status, createdAt])
@@ -495,11 +523,50 @@ model Attachment {
   caption      String?
   data         Bytes
   createdAt    DateTime       @default(now())
+  followUpId   String?
 
   complaint  Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
   uploadedBy User      @relation(fields: [uploadedById], references: [id])
+  followUp   FollowUp? @relation(fields: [followUpId], references: [id], onDelete: Cascade)
 
   @@index([complaintId])
+  @@index([followUpId])
+}
+
+// One entry in a case's citizen-led evidence trail: an official complaint filed elsewhere,
+// an official response received, or what a resident saw on site afterwards. Any signed-in
+// citizen may add one to a public case, not only the person who reported it.
+model FollowUp {
+  id          String        @id @default(cuid())
+  complaintId String
+  authorId    String
+  kind        FollowUpKind
+  note        String?
+  // When the citizen says it happened: the day the official complaint was filed or the
+  // response arrived, or when the site was observed. createdAt is when it reached AirWatch.
+  occurredOn  DateTime?
+  // Where the citizen stood when adding it, if they shared their location.
+  latitude    Float?
+  longitude   Float?
+  // Official complaint only.
+  officialChannel   String?
+  officialReference String?
+
+  check       EvidenceCheck @default(UNCHECKED)
+  checkNote   String?
+  checkedById String?
+  checkedAt   DateTime?
+  // Seeded demonstration history, never a real citizen's entry.
+  isDemo      Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  complaint   Complaint    @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  author      User         @relation("FollowUpAuthor", fields: [authorId], references: [id])
+  checkedBy   User?        @relation("FollowUpChecker", fields: [checkedById], references: [id])
+  attachments Attachment[]
+
+  @@index([complaintId, createdAt])
+  @@index([check])
 }
 
 // Append-only audit trail.

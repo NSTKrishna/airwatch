@@ -53,11 +53,12 @@ export async function captureSiteEvidence(siteId) {
  */
 export async function routeComplaint({ projectCode, siteId, localityCode, wardSlug, latitude, longitude }) {
   const invalid = (fields) => badRequest('Some fields are invalid', { fields });
+  const located = latitude !== undefined;
+  const chosen = localityCode ? await prisma.locality.findUnique({ where: { code: localityCode }, include: { ward: true } }) : null;
+  if (localityCode && !chosen) throw invalid({ localityCode: 'Unknown locality' });
   let project = null;
   let site = null;
   let ward = null;
-  let locality = localityCode ? await prisma.locality.findUnique({ where: { code: localityCode }, include: { ward: true } }) : null;
-  if (localityCode && !locality) throw invalid({ localityCode: 'Unknown locality' });
 
   if (projectCode) {
     project = await prisma.project.findFirst({ where: { code: projectCode, active: true }, include: { ward: true, site: true } });
@@ -66,26 +67,30 @@ export async function routeComplaint({ projectCode, siteId, localityCode, wardSl
     ward = project.ward;
   } else if (siteId) {
     site = await prisma.site.findFirst({ where: { id: siteId }, include: { locality: { include: { ward: true } }, project: { include: { ward: true } } } });
-    if (!site || (locality && site.localityId !== locality.id)) throw invalid({ siteId: locality ? 'This site is not in the selected locality' : 'Unknown site' });
+    if (!site || (chosen && site.localityId !== chosen.id)) throw invalid({ siteId: chosen ? 'This site is not in the selected locality' : 'Unknown site' });
     project = site.project;
     ward = site.project?.ward ?? site.locality.ward;
-    locality = site.locality;
-  } else if (locality) {
-    ward = locality.ward;
-  } else if (latitude !== undefined) {
+  } else if (located) {
     ward = await wardAt(latitude, longitude);
     if (!ward) throw invalid({ latitude: 'This location is outside the mapped Mumbai wards' });
   } else if (wardSlug) {
     ward = await prisma.ward.findUnique({ where: { slug: wardSlug } });
     if (!ward) throw invalid({ wardSlug: 'Unknown ward' });
+  } else if (chosen) {
+    ward = chosen.ward;
   }
 
-  locality ??= ward ? await localityOfWard(ward.id) : null;
+  // The monitoring area follows the ward, so a report can never be filed under one ward and
+  // another ward's area. Only places from before ward routing existed have an area and no ward.
+  const locality = ward ? await localityOfWard(ward.id) : site?.locality ?? chosen;
   if (!locality) {
     throw invalid(ward
-      ? { [latitude !== undefined ? 'latitude' : 'wardSlug']: `${ward.name} ward is not part of the pilot yet, so reports there cannot be reviewed` }
+      ? { [located ? 'latitude' : 'wardSlug']: `${ward.name} ward is not part of the pilot yet, so reports there cannot be reviewed` }
       : { locationText: 'Choose a project, share your location, or choose the ward' });
   }
+  // An area or ward picked by hand must agree with where the project or the coordinates put the report.
+  if (chosen && chosen.id !== locality.id) throw invalid({ localityCode: `This place is in ${ward.name} ward, not the area selected` });
+  if (wardSlug && ward && ward.slug !== wardSlug) throw invalid({ wardSlug: `This place is in ${ward.name} ward, not the ward selected` });
   return { project, site, ward, locality };
 }
 

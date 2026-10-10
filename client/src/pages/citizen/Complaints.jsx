@@ -24,7 +24,7 @@ export default function MyComplaints() {
             : data.complaints.length === 0 ? (
               <Panel>
                 <EmptyState icon={FileText} title={t('complaints.empty')}
-                  action={<Link to="/citizen/report" className={buttonClass()}>{t('monitor.reportOther')}</Link>}>
+                  action={<Link to="/citizen/report" className={buttonClass()}>{t('nav.reportDust')}</Link>}>
                   {t('complaints.emptyBody')}
                 </EmptyState>
               </Panel>

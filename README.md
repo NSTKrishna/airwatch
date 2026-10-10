@@ -112,11 +112,24 @@ What the public sees of a report:
 - **Under review onward:** the description, the citizen's photographs and the status history.
 - **Closed:** the inspection findings and corrective action, or the reason for rejection.
 - **Never:** the citizen, any officer, internal notes or inspection photographs. A report that
-  names no project is placed to about 100 m.
+  names no project is placed to about 100 m. Embedded photo metadata (EXIF with GPS) is removed
+  from every upload before it is stored.
 
 A reviewer can take a report off the public map with a reason (`POST
 /api/municipal/complaints/:id/visibility`). That is moderation only: the case and its status are
 untouched, the citizen still sees it, and the change is written to the audit trail.
+
+## Independent accountability
+
+A status entered on the AirWatch case desk shows a workflow, not that BMC acted or that the dust
+stopped. Each case therefore carries three positions that are never merged: the AirWatch review,
+the official BMC complaint (from evidence a citizen submits and a moderator checks), and what
+residents see on site. A citizen files with BMC themselves using the prepared complaint and the
+listed official channels, records the reference and acknowledgment, and adds follow-up
+observations. Any signed-in resident can add to a public case.
+
+The workflow, its privacy rules, the map markers and the endpoints are in
+[docs/ACCOUNTABILITY.md](docs/ACCOUNTABILITY.md).
 
 ## Reference data
 
@@ -222,8 +235,9 @@ cases at the pilot's projects across every stage of the lifecycle): `npm --prefi
 data:load`. The readings need the model to be answering; `-- --no-readings` loads the case history
 alone.
 
-Development logins: `citizen@airwatch.test` / `Citizen@123`, `officer@airwatch.test` / `Officer@123`,
-`inspector@airwatch.test` / `Officer@123`. Public sign-up always creates a citizen.
+Development logins: `citizen@airwatch.test` / `Citizen@123`, `resident@airwatch.test` / `Citizen@123`
+(a second citizen, for follow-up by someone other than the reporter), `officer@airwatch.test` /
+`Officer@123`, `inspector@airwatch.test` / `Officer@123`. Public sign-up always creates a citizen.
 
 To see the whole workflow: open the map signed out and pick a project. As the officer open **Sensor
 simulator** and set that project to "Construction dust event". As the citizen, report dust at the
@@ -243,6 +257,7 @@ npm test
 | `ingestion.test.js` | Mumbai seed, device registration and auth, single and 15-minute batch uploads, duplicates, invalid values, timestamps, publication, PM2.5, model error statuses |
 | `workflow.test.js` | Simulator scenarios, complaint creation with evidence, citizen/municipal permissions, lifecycle and audit trail |
 | `public.test.js` | Public map API, reference-data integrity (sources, projects inside their ward), ward routing, the citizen to case desk to public status loop, what stays private, moderation |
+| `accountability.test.js` | The independent loop end to end (report, official reference, moderator check, residents' follow-up), a resolved case the citizen disputes, metadata stripping, photo caching after moderation, ward and area consistency |
 | `live-model.test.js` | The real FastAPI model against its published smoke test. Skipped if the artifact is not loaded |
 
 The HTTP tests use a labelled **test double** of the model (`test/helpers/modelDouble.js`). It is not
@@ -261,6 +276,11 @@ the public status history shown on the map.
 
 - Everything measured is simulated, including background PM10 and wind. With a real device and no
   approved background and wind source, readings are stored and shown but not evaluated.
+- A moderator's check of an acknowledgment compares the reference with the document the citizen
+  submitted. AirWatch has no way to look a reference up with BMC, so "on record" is never
+  "confirmed by BMC".
+- A dispute does not reopen a case on the AirWatch desk. The lifecycle is unchanged: the dispute
+  stands beside the closure on the public page.
 - Project and ward facts were checked on the dates stored with them and will go stale: completion
   dates slip, officers and representatives change. Nothing refreshes them automatically.
 - Elected representatives are listed only where a source confirmed them. They are shown as
