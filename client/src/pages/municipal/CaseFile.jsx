@@ -38,6 +38,8 @@ function FollowUp({ entry, run, busy }) {
   const [open, setOpen] = useState(false);
   const check = (result) => run(`check-${entry.id}`, () => api.post(`/municipal/follow-ups/${entry.id}/check`, { check: result, note }));
   const official = entry.track === 'OFFICIAL';
+  // An official entry is verified against its document. With none attached it can only wait or be set aside.
+  const noDocument = official && entry.attachments.length === 0;
   return (
     <li className="py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -72,8 +74,9 @@ function FollowUp({ entry, run, busy }) {
           <FormField label="Note on the check" htmlFor={`check-${entry.id}`} hint="Shown publicly with the entry. Required to set an entry aside.">
             <textarea id={`check-${entry.id}`} rows={2} className="field resize-y" value={note} onChange={(e) => setNote(e.target.value)} />
           </FormField>
+          {noDocument ? <p className="text-[0.8125rem] text-warn">No acknowledgment or reply was attached, so this cannot be verified. Ask the citizen to add it, or set the entry aside.</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" icon={BadgeCheck} loading={busy === `check-${entry.id}`} onClick={() => check('VERIFIED')}>Evidence supports it</Button>
+            <Button size="sm" icon={BadgeCheck} disabled={noDocument} loading={busy === `check-${entry.id}`} onClick={() => check('VERIFIED')}>Evidence supports it</Button>
             <Button size="sm" variant="danger" icon={CircleX} disabled={!note.trim()} loading={busy === `check-${entry.id}`} onClick={() => check('SET_ASIDE')}>Set aside</Button>
             <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
           </div>

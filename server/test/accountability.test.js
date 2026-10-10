@@ -75,6 +75,22 @@ test('uploaded photographs lose their embedded metadata and keep their orientati
   assert.equal(clean.readUInt16BE(exif - 2), 34);
   assert.equal(clean.readUInt16BE(exif + 24), 6);
 
+  // A progressive JPEG has several scans. Metadata between them, and anything after the end of
+  // the image, has to go too, without disturbing the compressed data (stuffed FF 00, restart markers).
+  const seg = (marker, text) => { const body = Buffer.from(text, 'latin1'); const head = Buffer.alloc(4); head.writeUInt16BE(0xff00 | marker, 0); head.writeUInt16BE(body.length + 2, 2); return Buffer.concat([head, body]); };
+  const scan = Buffer.from([0xff, 0xda, 0x00, 0x02, 0x11, 0xff, 0x00, 0x22, 0xff, 0xd3, 0x33]);
+  const progressive = Buffer.concat([
+    Buffer.from([0xff, 0xd8]), seg(0xe0, 'JFIF\0'), seg(0xdb, 'quant'), scan,
+    seg(0xfe, 'GPS 19.5555N between scans'), seg(0xe1, 'Exif\0\0late exif'), seg(0xc4, 'huff'), scan,
+    Buffer.from([0xff, 0xd9]), Buffer.from('trailer: home address 221B', 'latin1'),
+  ]);
+  const cleaned = stripMetadata(progressive, 'image/jpeg');
+  for (const secret of ['GPS 19.5555N', 'late exif', 'home address']) assert.equal(cleaned.toString('latin1').includes(secret), false, secret);
+  assert.equal(cleaned.subarray(-2).equals(Buffer.from([0xff, 0xd9])), true, 'ends at the end-of-image marker');
+  assert.equal(cleaned.toString('latin1').split(scan.toString('latin1')).length, 3, 'both scans survive byte for byte');
+  assert.ok(cleaned.includes('huff') && cleaned.includes('quant'), 'tables the decoder needs are kept');
+  assert.throws(() => stripMetadata(Buffer.concat([Buffer.from([0xff, 0xd8]), scan]), 'image/jpeg'), { malformedImage: true }, 'a scan with no end marker');
+
   const chunk = (type, data) => {
     const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
     const out = Buffer.alloc(body.length + 8);
@@ -146,6 +162,14 @@ test('recording an official complaint filed elsewhere, and what a follow-up may 
   assert.ok(missing.body.error.fields.officialReference && missing.body.error.fields.officialChannel && missing.body.error.fields.occurredOn);
   assert.equal((await followUp(reference, tokens.citizen, { ...filing, officialChannel: 'whatsapp' })).status, 400);
   assert.ok((await followUp(reference, tokens.citizen, { ...filing, occurredOn: '2031-01-01' })).body.error.fields.occurredOn);
+  // Not a calendar date, and not a day that has not started yet in Mumbai.
+  for (const impossible of ['2026-02-31', '2026-99-99', '10/10/2026']) {
+    const refused = await followUp(reference, tokens.citizen, { ...filing, occurredOn: impossible });
+    assert.equal(refused.status, 400, impossible);
+    assert.match(refused.body.error.fields.occurredOn, /real date/, impossible);
+  }
+  const mumbai = (offsetDays) => new Date(Date.now() + 5.5 * 3_600_000 + offsetDays * 86_400_000).toISOString().slice(0, 10);
+  assert.match((await followUp(reference, tokens.citizen, { ...filing, occurredOn: mumbai(1) })).body.error.fields.occurredOn, /future/);
   // An open case cannot be "disputed", and an observation needs a photograph or a description.
   assert.ok((await followUp(reference, tokens.citizen, { kind: 'DISPUTE_CLOSURE', note: 'I disagree with this outcome.' })).body.error.fields.kind);
   assert.ok((await followUp(reference, tokens.citizen, { kind: 'STILL_UNRESOLVED' })).body.error.fields.note);
@@ -258,6 +282,19 @@ test('residents add what they see on site; text and photographs wait for a moder
     { reports: 1, official: 1, acknowledged: 1, action: 0, improved: 1, resolved: 0 });
 });
 
+test('an official entry cannot be verified without the document it is checked against', async () => {
+  const { reference, id } = ctx.report;
+  // A second filing, by phone this time, with no acknowledgment to show.
+  const bare = await followUp(reference, tokens.other, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-77', occurredOn: today() });
+  assert.equal(bare.status, 201);
+  const entry = (await caseFile(id)).complaint.followUps.at(-1);
+  assert.equal(entry.attachments.length, 0);
+  const refused = await check(entry.id, { check: 'VERIFIED' });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error.message, /nothing to check this against/);
+  assert.equal((await check(entry.id, { check: 'SET_ASIDE', note: 'No acknowledgment was attached.' })).status, 200);
+});
+
 test('an official response moves the official position only when its evidence is verified', async () => {
   const { reference } = ctx.report;
   assert.ok((await followUp(reference, tokens.citizen, { kind: 'OFFICIAL_RESPONSE', note: 'Ward office says a notice was issued.' })).body.error.fields.acknowledgment);
@@ -313,12 +350,15 @@ test('AirWatch resolves a case and the citizen disputes it: both positions stay 
   assert.equal(r.status, 'RESOLVED');
 
   // A plain "still unresolved" after the closure contradicts it too; an improvement does not.
+  const disputedQueue = async () => (await api('GET', '/municipal/complaints?followUp=disputed', officer())).body.complaints.map((c) => c.id);
   await followUp(reference, tokens.other, { kind: 'STILL_UNRESOLVED', note: 'Same again this morning, dust across the lane.' });
   r = await publicReport(reference);
   assert.deepEqual({ state: r.positions.citizen.state, contradicts: r.positions.citizen.contradictsClosure }, { state: 'PERSISTS', contradicts: true });
+  assert.deepEqual(await disputedQueue(), [id], 'a plain "still unresolved" after the closure keeps the case in the disputed queue');
   await followUp(reference, tokens.other, { kind: 'IMPROVEMENT_OBSERVED', note: 'Loads covered tonight and the road was washed.' });
   r = await publicReport(reference);
   assert.deepEqual({ state: r.positions.citizen.state, contradicts: r.positions.citizen.contradictsClosure }, { state: 'IMPROVED', contradicts: false });
+  assert.deepEqual(await disputedQueue(), [], 'a later improvement takes it out again: the queue follows the current position');
   outcomes = (await api('GET', '/public/overview')).body.outcomes;
   assert.equal(outcomes.followUps, 6, 'three live entries on each case; the one set aside is not counted');
 });

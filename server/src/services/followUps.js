@@ -20,13 +20,17 @@ const channelName = (key) => DUST_AUTHORITY.channels.find((c) => c.key === key)?
 const MAX_PER_AUTHOR_PER_DAY = 10;
 const DAY_MS = 86_400_000;
 const isClosed = (status) => status === 'RESOLVED' || status === 'REJECTED';
+const IST_OFFSET_MS = 5.5 * 3_600_000;
+const mumbaiToday = (now) => new Date(now.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+const day = (value) => (value ? new Date(value).toISOString().slice(0, 10) : null);
 const invalid = (fields) => badRequest('Some fields are invalid', { fields });
 
 /** Field-level problems with a follow-up, by kind. Returns `{}` when it is acceptable. */
 export function followUpProblems({ kind, note, occurredOn, officialChannel, officialReference }, { photos, acknowledgments, complaintStatus, now = new Date() }) {
   const fields = {};
   const text = note?.trim() ?? '';
-  if (occurredOn && occurredOn.getTime() > now.getTime() + DAY_MS) fields.occurredOn = 'This date is in the future';
+  // Dates are calendar days in the pilot's own time zone: nothing later than today in Mumbai.
+  if (occurredOn && day(occurredOn) > mumbaiToday(now)) fields.occurredOn = 'This date is in the future';
   if (kind === 'OFFICIAL_COMPLAINT') {
     if (!officialReference?.trim()) fields.officialReference = 'Enter the complaint or reference number you were given';
     if (!officialChannel) fields.officialChannel = 'Choose where you filed it';
@@ -83,9 +87,13 @@ export async function addFollowUp(complaint, author, input, { photoRows = [], ac
  * statement about the evidence submitted. It does not change the AirWatch review status.
  */
 export async function checkFollowUp(id, actor, { check, note }) {
-  const followUp = await prisma.followUp.findUnique({ where: { id } });
+  const followUp = await prisma.followUp.findUnique({ where: { id }, include: { _count: { select: { attachments: true } } } });
   if (!followUp) throw notFound('Follow-up not found');
   if (check === 'SET_ASIDE' && !note?.trim()) throw badRequest('Give the reason for setting this follow-up aside');
+  // "Acknowledgment on record" means a document was compared. Without one there is nothing to verify.
+  if (check === 'VERIFIED' && OFFICIAL.has(followUp.kind) && followUp._count.attachments === 0) {
+    throw badRequest('No acknowledgment or reply was attached, so there is nothing to check this against');
+  }
   if (followUp.check === check && (followUp.checkNote ?? '') === (note?.trim() ?? '')) throw conflict('This follow-up already has that result');
   await prisma.$transaction([
     prisma.followUp.update({ where: { id }, data: { check, checkNote: note?.trim() || null, checkedById: actor.id, checkedAt: new Date() } }),
@@ -98,8 +106,6 @@ export async function checkFollowUp(id, actor, { check, note }) {
   ]);
   return followUp.complaintId;
 }
-
-const day = (value) => (value ? new Date(value).toISOString().slice(0, 10) : null);
 
 /**
  * The three positions on a case. Follow-ups a moderator set aside count for nothing.
@@ -154,6 +160,22 @@ export function positions(complaint, followUps = [], now = new Date()) {
   };
 }
 
+/** Residents currently contest how the case was closed, whichever words they used. */
+export const isContested = (p) => p.citizen.state === 'DISPUTED' || p.citizen.contradictsClosure;
+
+/**
+ * Ids of the cases whose closure residents contest right now. This is the position as shown,
+ * from the latest live observation: an old dispute that a later improvement superseded is not
+ * in it, and a plain "still unresolved" after a resolution is.
+ */
+export async function contestedComplaintIds() {
+  const candidates = await prisma.complaint.findMany({
+    where: { status: { in: ['RESOLVED', 'REJECTED'] }, followUps: { some: { kind: { in: [...OBSERVATION] }, check: { not: 'SET_ASIDE' } } } },
+    select: { id: true, status: true, followUps: true, events: { where: { type: 'STATUS_CHANGED' }, orderBy: { createdAt: 'asc' }, select: { type: true, toStatus: true, createdAt: true } } },
+  });
+  return candidates.filter((c) => isContested(positions(c, c.followUps))).map((c) => c.id);
+}
+
 /** Outcome counts across cases: what happened after reports were filed, not how many were filed. */
 export function outcomeCounts(complaints) {
   const totals = { reports: 0, officialComplaints: 0, acknowledged: 0, actionDocumented: 0, followUps: 0, improvementReported: 0, improvementVerified: 0, persisting: 0, disputed: 0, airwatchResolved: 0 };
@@ -165,9 +187,7 @@ export function outcomeCounts(complaints) {
     if (p.official.state === 'ACKNOWLEDGED' || p.official.state === 'ACTION_DOCUMENTED') totals.acknowledged += 1;
     if (p.official.state === 'ACTION_DOCUMENTED') totals.actionDocumented += 1;
     if (p.citizen.state === 'IMPROVED') totals[p.citizen.verified ? 'improvementVerified' : 'improvementReported'] += 1;
-    // A closure a resident contests is counted as disputed, whichever words they used.
-    const contested = p.citizen.state === 'DISPUTED' || p.citizen.contradictsClosure;
-    if (contested) totals.disputed += 1;
+    if (isContested(p)) totals.disputed += 1;
     else if (p.citizen.state === 'PERSISTS') totals.persisting += 1;
     if (c.status === 'RESOLVED') totals.airwatchResolved += 1;
   }

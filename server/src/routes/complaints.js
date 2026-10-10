@@ -96,11 +96,18 @@ router.get('/:id', requireRole('CITIZEN'), async (req, res) => {
 
 // --- Citizen follow-up: the independent side of a case ---
 
+// A date that exists: 2026-02-31 and 2026-99-99 have the right shape and are not dates.
+const isCalendarDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
 const followUpSchema = z.object({
   kind: z.enum(FOLLOW_UP_KINDS),
   note: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(2000).optional()),
   // The day the citizen says it happened (filed, replied to, or observed), as YYYY-MM-DD.
-  occurredOn: z.preprocess((v) => (v === '' || v == null ? undefined : v), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-10').optional()),
+  occurredOn: z.preprocess((v) => (v === '' || v == null ? undefined : v), z.string().refine(isCalendarDate, 'Use a real date like 2026-10-10').optional()),
   latitude: optionalNumber(-90, 90),
   longitude: optionalNumber(-180, 180),
   officialChannel: z.preprocess((v) => (v === '' ? undefined : v), z.enum(CHANNEL_KEYS).optional()),

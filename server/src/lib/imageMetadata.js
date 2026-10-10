@@ -49,29 +49,52 @@ function orientationSegment(orientation) {
 // picture is drawn. Every other application segment and every comment is dropped.
 const KEEP_APP = new Set([0xe0, 0xe2, 0xee]);
 
+// Compressed scan data runs until the next real marker. Inside it, FF 00 is a stuffed data
+// byte, FF D0 to FF D7 are restart markers, and a run of FF is padding: none of those ends it.
+function scanEnd(buffer, from) {
+  let pos = from;
+  for (;;) {
+    pos = buffer.indexOf(0xff, pos);
+    if (pos === -1 || pos + 1 >= buffer.length) throw malformed();
+    const next = buffer[pos + 1];
+    if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) pos += 2;
+    else if (next === 0xff) pos += 1;
+    else return pos;
+  }
+}
+
 function stripJpeg(buffer) {
   if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) throw malformed();
   const kept = [];
   let orientation = null;
   let pos = 2;
   for (;;) {
-    if (pos + 4 > buffer.length || buffer[pos] !== 0xff) throw malformed();
+    if (pos + 2 > buffer.length || buffer[pos] !== 0xff) throw malformed();
     let marker = buffer[pos + 1];
     while (marker === 0xff) { // fill bytes before a marker
       pos += 1;
-      if (pos + 4 > buffer.length) throw malformed();
+      if (pos + 2 > buffer.length) throw malformed();
       marker = buffer[pos + 1];
     }
-    if (marker === 0xda) { // start of scan: compressed image data runs to the end of the file
-      kept.push(buffer.subarray(pos));
+    if (marker === 0xd9) { // end of image: whatever follows it is not part of the picture
+      kept.push(buffer.subarray(pos, pos + 2));
       break;
     }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { // markers that carry no length
+      kept.push(buffer.subarray(pos, pos + 2));
+      pos += 2;
+      continue;
+    }
+    if (pos + 4 > buffer.length) throw malformed();
     const length = buffer.readUInt16BE(pos + 2);
-    const end = pos + 2 + length;
+    let end = pos + 2 + length;
     if (length < 2 || end > buffer.length) throw malformed();
+    // A scan header is followed by its compressed data. A progressive picture has several
+    // scans, and metadata segments may sit between them, so the walk goes on after each one.
+    if (marker === 0xda) end = scanEnd(buffer, end);
     const application = marker >= 0xe0 && marker <= 0xef;
     if (marker === 0xe1 && buffer.toString('latin1', pos + 4, pos + 10) === 'Exif\0\0') {
-      orientation ??= exifOrientation(buffer.subarray(pos + 10, end));
+      orientation ??= exifOrientation(buffer.subarray(pos + 10, pos + 2 + length));
     }
     if (!(application && !KEEP_APP.has(marker)) && marker !== 0xfe) kept.push(buffer.subarray(pos, end));
     pos = end;

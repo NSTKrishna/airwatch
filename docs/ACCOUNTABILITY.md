@@ -71,9 +71,11 @@ sub-regional office. Residents still reporting dust: get a second resident's pho
 The case file has a section for citizen follow-up with each entry's evidence, who added it and how
 far from the site they stood. A moderator marks an entry **Evidence supports it** or **Set aside**
 (with a reason). That check is written to the audit trail. It does not move the case status, and
-the lifecycle rules are unchanged.
+the lifecycle rules are unchanged. An official complaint or response can be verified only when a
+document was attached to compare it with.
 
-The inbox filters by **Evidence to check** and **Closure disputed**. If BMC later uses this desk,
+The inbox filters by **Evidence to check** and **Closure disputed**. The second follows the
+position as it stands now: a later improvement takes a case out of it. If BMC later uses this desk,
 the same case and the same trail are what its officers would see.
 
 ![Case file: an official complaint and a resident's observation, each with its evidence and a moderator's check](images/case-desk-follow-ups.jpg)

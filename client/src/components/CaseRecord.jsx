@@ -301,7 +301,8 @@ export function FollowUpActions({ report, channels, formKind, setFormKind, onCha
   const location = useLocation();
   const [added, setAdded] = useState(false);
   if (user?.role === 'MUNICIPAL') return null;
-  if (formKind) {
+  // The form is for signed-in citizens. A visitor never reaches it, whatever asked for it.
+  if (formKind && user) {
     return <FollowUpForm key={formKind} report={report} kind={formKind} channels={channels} onCancel={() => setFormKind(null)}
       onDone={() => { setFormKind(null); setAdded(true); onChanged(); }} />;
   }
@@ -348,7 +349,7 @@ export function OfficialKit({ report, wardOffice, authority, onAddReference, onA
   const helpline = authority.channels.find((c) => c.phone);
   const escalate = authority.channels.filter((c) => c.key === 'mpcb-sro' || c.key === 'ward-office');
   const wardPhone = wardOffice?.phone?.split(' (')[0];
-  const canAdd = user?.role !== 'MUNICIPAL';
+  const location = useLocation();
 
   return (
     <div className="space-y-4 text-[0.875rem]">
@@ -389,12 +390,14 @@ export function OfficialKit({ report, wardOffice, authority, onAddReference, onA
       <div>
         <h3 className="font-medium">{t(filed ? 'kit.step3Filed' : 'kit.step3')}</h3>
         <p className="mt-0.5 text-ink-2">{t(filed ? 'kit.step3FiledBody' : 'kit.step3Body')}</p>
-        {canAdd ? (
+        {user?.role === 'CITIZEN' ? (
           <div className="mt-2 flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" icon={FileCheck} onClick={onAddReference}>{t('action.OFFICIAL_COMPLAINT')}</Button>
             {filed ? <Button variant="secondary" size="sm" icon={Landmark} onClick={onAddResponse}>{t('action.OFFICIAL_RESPONSE')}</Button> : null}
           </div>
-        ) : null}
+        ) : user ? null : (
+          <Link to="/login" state={{ from: location.pathname }} className={`${buttonClass({ variant: 'secondary', size: 'sm' })} mt-2`}>{t('action.signIn')}</Link>
+        )}
       </div>
 
       <div>

@@ -10,7 +10,7 @@ import {
   STATUSES, TRANSITIONS, addEvidence, addNote, assignOfficer, changeStatus, setVisibility, updateFindings,
 } from '../services/complaints.js';
 import { deviceView, generateToken, hashToken, tokenHint } from '../services/devices.js';
-import { checkFollowUp } from '../services/followUps.js';
+import { checkFollowUp, contestedComplaintIds } from '../services/followUps.js';
 import { SCENARIOS, publishSimulatedReadings } from '../services/mockSensorProvider.js';
 import { sourcesSummary } from '../services/monitoring.js';
 import { complaintDetailInclude, complaintListInclude, complaintMunicipalView, sitesWithLatest } from '../services/views.js';
@@ -86,7 +86,7 @@ router.get('/complaints', async (req, res) => {
   else if (query.assignee) where.assignedOfficerId = query.assignee;
   if (query.anomaly) where.anomalyEvaluationId = query.anomaly === 'yes' ? { not: null } : null;
   if (query.followUp === 'unchecked') where.followUps = { some: { check: 'UNCHECKED' } };
-  if (query.followUp === 'disputed') where.followUps = { some: { kind: 'DISPUTE_CLOSURE', check: { not: 'SET_ASIDE' } } };
+  if (query.followUp === 'disputed') where.id = { in: await contestedComplaintIds() };
   if (query.q) {
     const contains = { contains: query.q, mode: 'insensitive' };
     const or = [
