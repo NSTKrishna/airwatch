@@ -8,9 +8,11 @@
 // against the time it describes (see evaluateReading). Live readings never take
 // this path; they go through the ingestion API.
 // Repeatable: readings that already exist are skipped. Nothing is deleted.
+import { readFileSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { config } from '../src/config.js';
 import { prisma } from '../src/db.js';
+import { storeAttachments } from '../src/lib/storage.js';
 import { toAttachmentRows } from '../src/lib/uploads.js';
 import { addEvidence, addNote, captureSiteEvidence, changeStatus } from '../src/services/complaints.js';
 import { assessQuality } from '../src/services/ingestion.js';
@@ -25,7 +27,17 @@ const days = args.includes('--days') && daysArg > 0 ? daysArg : 7;
 const HOUR_MS = 3_600_000;
 const QUARTER_MS = 900_000;
 
-// Plain placeholder image so demo complaints have an attachment. Not a real photograph.
+// What a demo case shows as its photograph: one of three synthetic scenes rendered by
+// scripts/demo-images/render.py. They are not photographs, show no real site, and carry a
+// label saying so in the image itself.
+const DEMO_IMAGES = [1, 2, 3].map((n) => ({
+  originalname: `demo-image-${n}.jpg`,
+  buffer: readFileSync(new URL(`./demo-images/demo-dust-${n}.jpg`, import.meta.url)),
+}));
+const demoImage = (index) => DEMO_IMAGES[index % DEMO_IMAGES.length];
+const attach = async (files, base) => prisma.attachment.createMany({ data: await storeAttachments(toAttachmentRows(files, base)) });
+
+// Plain placeholder for documents on demo cases (acknowledgments, inspection evidence).
 function placeholderPng(width, height, [r, g, b]) {
   const row = Buffer.alloc(1 + width * 3);
   const raw = Buffer.alloc(row.length * height);
@@ -161,9 +173,23 @@ const HISTORY = [
     reason: 'No construction activity could be identified from the photographs or the location given.' },
 ];
 
+// Demo cases loaded before the demo scenes existed carry flat placeholder images. Swap them.
+async function refreshDemoImages() {
+  const old = await prisma.attachment.findMany({
+    where: { filename: { in: ['placeholder-photo.png', 'placeholder-follow-up.png'] }, kind: { in: ['CITIZEN_PHOTO', 'FOLLOW_UP_PHOTO'] }, complaint: { isDemo: true } },
+    select: { id: true }, orderBy: { createdAt: 'asc' },
+  });
+  for (const [index, { id }] of old.entries()) {
+    const [row] = await storeAttachments(toAttachmentRows([demoImage(index)], {}));
+    await prisma.attachment.update({ where: { id }, data: row });
+  }
+  return old.length;
+}
+
 async function demoComplaints(sites) {
   if (await prisma.complaint.count({ where: { isDemo: true, locality: { active: true } } })) {
-    console.log('Demo case history already exists for the current wards; skipping.');
+    const replaced = await refreshDemoImages();
+    console.log(`Demo case history already exists for the current wards; skipping.${replaced ? ` Replaced ${replaced} placeholder images with the demo scenes.` : ''}`);
     return;
   }
   const users = Object.fromEntries((await prisma.user.findMany()).map((u) => [u.email, u]));
@@ -175,7 +201,6 @@ async function demoComplaints(sites) {
 
   const wards = await prisma.ward.findMany({ where: { pilot: true }, orderBy: { code: 'asc' } });
   const sitesOf = (ward) => sites.filter((s) => s.project?.wardId === ward.id);
-  const tone = (i) => [[196, 170, 130], [176, 160, 140], [188, 150, 118], [170, 165, 150], [182, 176, 160]][i % 5];
 
   let created = 0;
   for (const [index, h] of HISTORY.entries()) {
@@ -199,10 +224,7 @@ async function demoComplaints(sites) {
         anomalyEvaluationId: evidence.anomalyEvaluationId, sensorSnapshot: evidence.sensorSnapshot ?? undefined,
       },
     });
-    await prisma.attachment.createMany({
-      data: toAttachmentRows([{ originalname: 'placeholder-photo.png', buffer: placeholderPng(480, 360, tone(index)) }],
-        { complaintId: complaint.id, uploadedById: citizen.id, kind: 'CITIZEN_PHOTO' }),
-    });
+    await attach([demoImage(index)], { complaintId: complaint.id, uploadedById: citizen.id, kind: 'CITIZEN_PHOTO' });
     await prisma.complaintEvent.create({
       data: { complaintId: complaint.id, actorId: citizen.id, type: 'SUBMITTED', toStatus: 'SUBMITTED', createdAt,
         metadata: { anomalyEvidenceAttached: Boolean(evidence.anomalyEvaluationId), photos: 1, routedToWard: ward.code } },
@@ -249,14 +271,12 @@ async function demoComplaints(sites) {
         },
       });
       const files = [
-        ...(f.photo ? [{ kind: 'FOLLOW_UP_PHOTO', name: 'placeholder-follow-up.png', colour: [160, 170, 150] }] : []),
+        ...(f.photo ? [{ kind: 'FOLLOW_UP_PHOTO', image: demoImage(index + n + 1) }] : []),
         ...(f.ack ? [{ kind: 'OFFICIAL_ACKNOWLEDGMENT', name: 'placeholder-acknowledgment.png', colour: [200, 200, 205] }] : []),
       ];
       for (const file of files) {
-        await prisma.attachment.createMany({
-          data: toAttachmentRows([{ originalname: file.name, buffer: placeholderPng(480, 360, file.colour) }],
-            { complaintId: id, uploadedById: author.id, kind: file.kind, followUpId: entry.id }),
-        });
+        await attach([file.image ?? { originalname: file.name, buffer: placeholderPng(480, 360, file.colour) }],
+          { complaintId: id, uploadedById: author.id, kind: file.kind, followUpId: entry.id });
       }
       await prisma.complaintEvent.create({
         data: { complaintId: id, actorId: author.id, type: 'FOLLOW_UP_ADDED', createdAt: at, metadata: { followUpId: entry.id, kind: f.kind, photos: f.photo ? 1 : 0, acknowledgment: Boolean(f.ack) } },

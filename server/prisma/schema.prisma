@@ -521,7 +521,9 @@ model Attachment {
   mimeType     String
   sizeBytes    Int
   caption      String?
-  data         Bytes
+  // The bytes live in exactly one place: here, or in object storage under `storageKey`.
+  data         Bytes?
+  storageKey   String?
   createdAt    DateTime       @default(now())
   followUpId   String?
 
