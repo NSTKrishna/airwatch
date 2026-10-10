@@ -59,7 +59,7 @@ export class AirWatchStack extends Stack {
 
     // --- The instance's identity. A Lightsail instance cannot take an IAM role of your own,
     // so it gets a user that can do exactly two things. Its access key is created outside this
-    // stack (deploy/aws/push-credentials.sh) and goes straight to the host: a key created
+    // stack (deploy/aws/deploy-backend.sh) and goes straight to the host: a key created
     // here would sit in the CloudFormation template for anyone who can read the stack.
     const instanceUser = new iam.User(this, 'InstanceUser');
     instanceUser.addToPolicy(new iam.PolicyStatement({

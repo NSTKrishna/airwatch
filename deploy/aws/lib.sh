@@ -21,7 +21,7 @@ need() { local tool; for tool in "$@"; do command -v "$tool" >/dev/null || die "
 out() {
   local value
   value=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text)
-  [ -n "$value" ] && [ "$value" != "None" ] || die "stack $STACK_NAME has no output $1. Has deploy/aws/setup.sh finished?"
+  if [ -z "$value" ] || [ "$value" = "None" ]; then die "stack $STACK_NAME has no output $1. Has deploy/aws/setup.sh finished?"; fi
   printf '%s' "$value"
 }
 

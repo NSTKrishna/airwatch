@@ -71,7 +71,9 @@ require_settings() {
   [ ${#missing[@]} -eq 0 ] || die "empty in $ENV_FILE: ${missing[*]}"
   case "$(setting API_DOMAIN)" in *example.com) die "API_DOMAIN is still the placeholder. Set it: host.sh set API_DOMAIN=<host name>" ;; esac
   if [ "$(setting ATTACHMENT_STORAGE)" = "s3" ]; then
-    [ -n "$(setting S3_BUCKET)" ] && [ -n "$(setting AWS_ACCESS_KEY_ID)" ] || die "ATTACHMENT_STORAGE=s3 needs S3_BUCKET and the AWS access key in $ENV_FILE"
+    if [ -z "$(setting S3_BUCKET)" ] || [ -z "$(setting AWS_ACCESS_KEY_ID)" ]; then
+      die "ATTACHMENT_STORAGE=s3 needs S3_BUCKET and the AWS access key in $ENV_FILE"
+    fi
   fi
 }
 
@@ -133,7 +135,7 @@ cmd_docker_credentials() {
   local id secret
   id=$(setting AWS_ACCESS_KEY_ID)
   secret=$(setting AWS_SECRET_ACCESS_KEY)
-  [ -n "$id" ] && [ -n "$secret" ] || die "no AWS access key in $ENV_FILE yet"
+  if [ -z "$id" ] || [ -z "$secret" ]; then die "no AWS access key in $ENV_FILE yet"; fi
   printf '[default]\naws_access_key_id = %s\naws_secret_access_key = %s\n' "$id" "$secret" | sudo sh -c 'umask 077; mkdir -p /root/.aws; cat > /root/.aws/credentials'
   echo "Wrote /root/.aws/credentials (mode 600) for the Docker daemon."
 }
@@ -160,13 +162,26 @@ cmd_backup() {
   echo "Database dump: $file ($(du -h "$file" | cut -f1))"
   bucket=$(setting S3_BUCKET)
   if [ -n "$bucket" ] && [ -n "$(setting AWS_ACCESS_KEY_ID)" ]; then
-    docker run --rm -i -e AWS_ACCESS_KEY_ID="$(setting AWS_ACCESS_KEY_ID)" -e AWS_SECRET_ACCESS_KEY="$(setting AWS_SECRET_ACCESS_KEY)" \
-      -e AWS_DEFAULT_REGION="$(setting AWS_REGION)" amazon/aws-cli:2.27.50 s3 cp - "s3://$bucket/backups/airwatch-$stamp.dump" < "$file" \
-      && echo "Copied to s3://$bucket/backups/airwatch-$stamp.dump" || echo "WARNING: the copy to S3 failed; the dump is on the host." >&2
+    if docker run --rm -i -e AWS_ACCESS_KEY_ID="$(setting AWS_ACCESS_KEY_ID)" -e AWS_SECRET_ACCESS_KEY="$(setting AWS_SECRET_ACCESS_KEY)" \
+      -e AWS_DEFAULT_REGION="$(setting AWS_REGION)" amazon/aws-cli:2.27.50 s3 cp - "s3://$bucket/backups/airwatch-$stamp.dump" < "$file"; then
+      echo "Copied to s3://$bucket/backups/airwatch-$stamp.dump"
+    else
+      echo "WARNING: the copy to S3 failed; the dump is on the host." >&2
+    fi
   fi
   # Keep the newest dumps only. The names are generated above, so ls is safe to parse.
   # shellcheck disable=SC2012
   ls -1t "$BACKUPS"/airwatch-*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f
+}
+
+# A failed release must not leave the host on a half-started revision. Start the release
+# that `current` points at again; its images are still on the host.
+restart_current() {
+  local dir id
+  dir=$(readlink -f "$ROOT/current")
+  id=$(basename "$dir")
+  say "Starting release $id again"
+  compose_in "$dir" "$id" up -d --remove-orphans && wait_healthy "$dir" "$id"
 }
 
 cmd_release() {
@@ -183,13 +198,19 @@ cmd_release() {
   fi
 
   say "Building and starting release $id"
-  compose_in "$dir" "$id" up -d --build --remove-orphans
-
-  say "Waiting for the API to become healthy"
-  if ! wait_healthy "$dir" "$id"; then
-    compose_in "$dir" "$id" ps
+  if ! compose_in "$dir" "$id" up -d --build --remove-orphans || ! wait_healthy "$dir" "$id"; then
+    compose_in "$dir" "$id" ps || true
     compose_in "$dir" "$id" logs --tail 40 migrate api || true
-    die "release $id did not become healthy. The previous release directory is untouched: run 'host.sh rollback' to return to it."
+    # `current` still names the last release that worked. Put the host back on it.
+    if [ -L "$ROOT/current" ] && [ "$(release_of "$ROOT/current")" != "$id" ]; then
+      local good
+      good=$(release_of "$ROOT/current")
+      if restart_current; then
+        die "release $id did not become healthy. The host is running release $good again. If $id applied a migration, the dump taken above undoes it: host.sh restore <dump file>."
+      fi
+      die "release $id did not become healthy, and release $good did not come back either. Inspect: host.sh compose ps, host.sh compose logs api"
+    fi
+    die "release $id did not become healthy. Nothing was running before it, so there is nothing to return to."
   fi
 
   if [ -L "$ROOT/current" ] && [ "$(release_of "$ROOT/current")" != "$id" ]; then
@@ -198,11 +219,15 @@ cmd_release() {
   ln -sfn "$dir" "$ROOT/current"
   cmd_status
 
-  # Old release directories and their images go; the current and previous ones stay.
-  local old
+  # Old release directories and their images go. The current and previous releases always
+  # stay, however many failed attempts are newer than they are.
+  local old current previous=
+  current=$(readlink -f "$ROOT/current")
+  if [ -L "$ROOT/previous" ]; then previous=$(readlink -f "$ROOT/previous"); fi
   # shellcheck disable=SC2012  # release ids are git hashes
   ls -1dt "$ROOT"/releases/*/ | tail -n +$((KEEP_RELEASES + 1)) | while read -r old; do
     old=${old%/}
+    if [ "$old" = "$current" ] || [ "$old" = "$previous" ]; then continue; fi
     docker image rm "airwatch-api:$(basename "$old")" "airwatch-model:$(basename "$old")" >/dev/null 2>&1 || true
     rm -rf "$old"
   done

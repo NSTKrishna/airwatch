@@ -30,9 +30,9 @@ echo "SSH will be allowed from $SSH_CIDR only."
 say "Lightsail key pair"
 if aws lightsail get-key-pair --key-pair-name "$KEY_PAIR_NAME" >/dev/null 2>&1; then
   echo "$KEY_PAIR_NAME exists. Its private key is expected at $SSH_KEY."
-  [ -f "$SSH_KEY" ] || die "$SSH_KEY is missing. Point SSH_KEY at the private key of $KEY_PAIR_NAME, or choose another KEY_PAIR_NAME."
+  if [ ! -f "$SSH_KEY" ]; then die "$SSH_KEY is missing. Point SSH_KEY at the private key of $KEY_PAIR_NAME, or choose another KEY_PAIR_NAME."; fi
 else
-  [ ! -e "$SSH_KEY" ] || die "$SSH_KEY already exists but the key pair $KEY_PAIR_NAME does not. Move the file or set SSH_KEY."
+  if [ -e "$SSH_KEY" ]; then die "$SSH_KEY already exists but the key pair $KEY_PAIR_NAME does not. Move the file or set SSH_KEY."; fi
   # Lightsail returns the private key once. It goes to ~/.ssh, never into the repository.
   (umask 077; mkdir -p "$(dirname "$SSH_KEY")"; aws lightsail create-key-pair --key-pair-name "$KEY_PAIR_NAME" --query privateKeyBase64 --output text > "$SSH_KEY")
   echo "Created $KEY_PAIR_NAME; private key saved to $SSH_KEY (mode 600)."
@@ -41,7 +41,9 @@ fi
 say "Lightsail plan"
 if [ -z "${BUNDLE_ID:-}" ]; then
   BUNDLE_ID=$(aws lightsail get-bundles --query "bundles[?isActive && ramSizeInGb==\`2.0\` && price==\`12.0\` && contains(supportedPlatforms, 'LINUX_UNIX')] | [0].bundleId" --output text)
-  [ -n "$BUNDLE_ID" ] && [ "$BUNDLE_ID" != "None" ] || die "could not find the 2 GB Linux plan in $AWS_REGION. List them with 'aws lightsail get-bundles' and set BUNDLE_ID."
+  if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "None" ]; then
+    die "could not find the 2 GB Linux plan in $AWS_REGION. List them with 'aws lightsail get-bundles' and set BUNDLE_ID."
+  fi
 fi
 aws lightsail get-bundles --query "bundles[?bundleId=='$BUNDLE_ID'].[bundleId, ramSizeInGb, cpuCount, diskSizeInGb, transferPerMonthInGb, price]" --output text \
   | awk '{ printf "%s: %s GB RAM, %s vCPU, %s GB disk, %s GB transfer, %s USD a month\n", $1, $2, $3, $4, $5, $6 }'

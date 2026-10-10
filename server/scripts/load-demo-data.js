@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { config } from '../src/config.js';
 import { prisma } from '../src/db.js';
-import { storeAttachments } from '../src/lib/storage.js';
+import { withStoredAttachments } from '../src/lib/storage.js';
 import { toAttachmentRows } from '../src/lib/uploads.js';
 import { addEvidence, addNote, captureSiteEvidence, changeStatus } from '../src/services/complaints.js';
 import { assessQuality } from '../src/services/ingestion.js';
@@ -35,7 +35,8 @@ const DEMO_IMAGES = [1, 2, 3].map((n) => ({
   buffer: readFileSync(new URL(`./demo-images/demo-dust-${n}.jpg`, import.meta.url)),
 }));
 const demoImage = (index) => DEMO_IMAGES[index % DEMO_IMAGES.length];
-const attach = async (files, base) => prisma.attachment.createMany({ data: await storeAttachments(toAttachmentRows(files, base)) });
+// Stored and recorded together: if the row cannot be written, the stored object is removed.
+const attach = (files, base) => withStoredAttachments(toAttachmentRows(files, base), (rows) => prisma.attachment.createMany({ data: rows }));
 
 // Plain placeholder for documents on demo cases (acknowledgments, inspection evidence).
 function placeholderPng(width, height, [r, g, b]) {
@@ -180,8 +181,7 @@ async function refreshDemoImages() {
     select: { id: true }, orderBy: { createdAt: 'asc' },
   });
   for (const [index, { id }] of old.entries()) {
-    const [row] = await storeAttachments(toAttachmentRows([demoImage(index)], {}));
-    await prisma.attachment.update({ where: { id }, data: row });
+    await withStoredAttachments(toAttachmentRows([demoImage(index)], {}), ([row]) => prisma.attachment.update({ where: { id }, data: row }));
   }
   return old.length;
 }

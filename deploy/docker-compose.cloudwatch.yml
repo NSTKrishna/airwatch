@@ -2,9 +2,10 @@
 #   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.cloudwatch.yml --env-file deploy/.env.production up -d
 #
 # The Docker daemon does the shipping, so it needs credentials of its own: on Lightsail an IAM
-# user key in /root/.aws/credentials (deploy/aws/push-credentials.sh writes it). A container
-# whose log stream cannot be created does not start, so deploy/scripts/release.sh checks the
-# key first and leaves this overlay out when the check fails. `docker logs` keeps working.
+# user key in /root/.aws/credentials (`deploy/scripts/host.sh docker-credentials` writes it,
+# and deploy/aws/deploy-backend.sh calls that). A container whose log stream cannot be created
+# does not start, so `host.sh release` tries the key first and leaves this overlay out when
+# the try fails. `docker logs` keeps working.
 x-cloudwatch: &cloudwatch
   driver: awslogs
   options:
