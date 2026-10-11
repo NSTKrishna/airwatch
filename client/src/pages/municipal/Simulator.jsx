@@ -5,10 +5,10 @@ import { useApi } from '../../lib/useApi.js';
 import { LoadError, Notice, Panel, Skeleton } from '../../components/ui.jsx';
 
 const RESULT_TEXT = {
-  EVALUATED: (r) => (r.isAnomaly ? 'Reading uploaded; the model flagged an unexpected PM10 excess' : 'Reading uploaded; the model found it within the expected range'),
-  INPUT_REJECTED: (r) => `Reading uploaded and stored, not assessed: ${r.reason}`,
-  MODEL_UNAVAILABLE: () => 'Reading uploaded and stored; the model is unavailable, so there is no assessment',
-  MODEL_ERROR: () => 'Reading uploaded and stored; the model returned an error, so there is no assessment',
+  EVALUATED: (r) => (r.isAnomaly ? 'Reading uploaded · Unexpected PM10 reading' : 'Reading uploaded · Within expected range'),
+  INPUT_REJECTED: () => 'Reading uploaded · Assessment unavailable',
+  MODEL_UNAVAILABLE: () => 'Reading uploaded · Assessment unavailable',
+  MODEL_ERROR: () => 'Reading uploaded · Assessment unavailable',
 };
 const describe = (r) => {
   if (r.notSent) return 'Nothing uploaded: the simulated device is offline';
@@ -42,7 +42,7 @@ export default function Simulator() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sensor simulator</h1>
         <p className="mt-1 max-w-[70ch] text-ink-2">
-          Each verified project has a simulated DEMO monitor that uploads PM2.5, PM10, temperature and humidity through the same authenticated API a physical device uses. Pick a scenario to change what a device sends, or to interrupt the simulated background or wind feed. Any assessment still comes from the model.
+          Each verified project has a simulated demo monitor. Choose a scenario to change its readings or pause the simulated background or weather feed.
         </p>
         {data ? <p className="mt-2 text-[0.875rem] text-ink-2">Background: <span className="font-medium text-ink">{data.sources.background.description}</span>. Wind: <span className="font-medium text-ink">{data.sources.weather.description}</span>.</p> : null}
       </div>
@@ -77,7 +77,7 @@ export default function Simulator() {
             </div>
           </Panel>
           <p className="text-[0.8125rem] text-ink-2">
-            {data.enabled ? `Simulated devices sample every minute and upload ${data.batchMinutes > 1 ? `in ${data.batchMinutes}-minute batches` : 'each reading as it is taken'}.` : 'The automatic simulator is off in this process; use "Read sensors now" on the overview or run the simulator worker.'} A flatlined sensor is recognised after ten identical readings. Under normal conditions a site can still be flagged occasionally: the model's calibration accepts roughly a 5% false-alarm rate.
+            {data.enabled ? `Demo readings are collected every minute${data.batchMinutes > 1 ? ` and uploaded in ${data.batchMinutes}-minute batches` : ''}.` : 'Automatic demo readings are paused. Use “Read sensors now” on the overview to create a reading.'} Readings can occasionally need review; they are not proof of a violation.
           </p>
         </>
       )}

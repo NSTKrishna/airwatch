@@ -23,7 +23,7 @@ export default function PublicLayout() {
   ];
   const navClass = ({ isActive }) => `rounded-lg px-3 py-1.5 text-[0.9375rem] font-medium transition-colors duration-150 ${isActive ? 'bg-accent-soft text-accent-strong' : 'text-ink-2 hover:bg-mute-soft hover:text-ink'}`;
   // The map owns the "/" subtree (project, report and ward panels live inside it).
-  const onMap = !['/track', '/citizen'].some((prefix) => location.pathname.startsWith(prefix));
+  const onMap = !['/track', '/citizen', '/methodology'].some((prefix) => location.pathname.startsWith(prefix));
 
   return (
     <div className="flex h-dvh flex-col">
@@ -55,6 +55,10 @@ export default function PublicLayout() {
           {onMap ? <Outlet /> : <div className="mx-auto max-w-6xl px-4 py-5 md:px-6 md:py-8"><Outlet /></div>}
         </Suspense>
       </main>
+
+      <footer className="shrink-0 border-t border-line bg-surface px-4 py-1 text-right text-[0.6875rem] text-ink-3">
+        <Link to="/methodology" className="underline hover:text-ink">{t('method.link')}</Link>
+      </footer>
 
       <nav aria-label="Primary" className="z-30 flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
         {links.map(({ to, end, label, icon: Icon }) => (

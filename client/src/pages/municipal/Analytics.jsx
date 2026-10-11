@@ -50,7 +50,7 @@ export default function Analytics() {
 
           <Panel className="overflow-hidden">
             <h2 className="px-4 pt-4 font-semibold sm:px-5">Locality summary</h2>
-            <p className="px-4 pb-3 text-[0.8125rem] text-ink-2 sm:px-5">Readings from the last {rangeLabel}; complaints are all-time. An anomalous reading is one PM10 evaluation above its dynamic barrier, not a confirmed violation. PM2.5 is not assessed by the model.</p>
+            <p className="px-4 pb-3 text-[0.8125rem] text-ink-2 sm:px-5">Readings from the last {rangeLabel}; complaints are all-time. An unexpected PM10 reading is a signal for review, not a confirmed violation. PM2.5 is shown for information.</p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[58rem] text-[0.875rem]">
                 <thead className="border-y border-line bg-paper text-[0.75rem] text-ink-2">

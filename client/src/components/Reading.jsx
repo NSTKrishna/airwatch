@@ -1,5 +1,4 @@
-// Measurement comparison: site vs background, and the observed difference
-// against the model's dynamic barrier. Used on both dashboards.
+// Measurement comparison: site vs background, and the review threshold.
 import { useI18n } from '../lib/i18n.jsx';
 import { fmtNumber } from '../lib/format.js';
 
@@ -15,7 +14,7 @@ export function BarrierScale({ difference, barrier, expected }) {
       <div className="relative h-9">
         {/* track */}
         <div className="absolute inset-x-0 top-3 h-3 rounded-full bg-mute-soft" />
-        {/* calibrated margin band between the expected difference and the barrier */}
+        {/* range marker leading to the review threshold */}
         <div className="absolute top-3 h-3 bg-line-strong/60" style={{ left: pct(expected), width: `calc(${pct(barrier)} - ${pct(expected)})` }} />
         {/* observed difference */}
         <div className={`absolute left-0 top-3 h-3 rounded-full transition-[width] duration-300 ease-out ${over ? 'bg-flag' : 'bg-accent'}`}

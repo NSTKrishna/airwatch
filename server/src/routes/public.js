@@ -73,9 +73,8 @@ async function wardCounts() {
 }
 
 router.get('/overview', async (_req, res) => {
-  const [wards, status, { counts, monitors, outcomes }] = await Promise.all([
+  const [wards, { counts, monitors, outcomes }] = await Promise.all([
     prisma.ward.findMany({ orderBy: { code: 'asc' } }),
-    systemStatus(),
     wardCounts(),
   ]);
   const bySlug = new Map(wards.map((w) => [w.slug, w.id]));
@@ -99,8 +98,6 @@ router.get('/overview', async (_req, res) => {
     wards: rows,
     totals,
     outcomes,
-    model: { ready: status.model.ready, version: status.model.version, scope: status.model.scope, limitations: status.model.limitations },
-    sensors: status.sensors,
     dustAuthority: DUST_AUTHORITY,
     boundarySource: boundarySource(),
   });
@@ -196,6 +193,29 @@ router.get('/reports/:reference', optionalAuth, async (req, res) => {
   // A hidden report answers exactly like one that does not exist.
   if (!complaint || new Date(complaint.createdAt).getUTCFullYear() !== Number(match[1])) throw notFound('Report not found');
   res.json({ report: complaintPublicView(complaint, { detail: true, viewerId: req.user?.id }), dustAuthority: DUST_AUTHORITY });
+});
+
+// Complete model provenance lives on this deliberate reference page, not in map summaries.
+router.get('/methodology', async (_req, res) => {
+  const { model, sensors } = await systemStatus();
+  res.json({
+    model: {
+      available: model.ready,
+      version: model.version,
+      algorithm: model.algorithm,
+      artifactVersion: model.artifactVersion,
+      dataSource: model.dataSource,
+      syntheticOnly: model.syntheticOnly,
+      measurement: model.measurement,
+      features: model.features,
+      calibration: model.calibration,
+      calibratedMargin: model.calibratedMargin,
+      scope: model.scope,
+      limitations: model.limitations,
+      trainedDomain: model.trainedDomain,
+    },
+    monitoring: { simulated: sensors.simulated, simulatedDevices: sensors.devices.simulated, physicalDevices: sensors.devices.real },
+  });
 });
 
 const locateQuery = z.object({ lat: z.coerce.number().min(-90).max(90), lng: z.coerce.number().min(-180).max(180) });

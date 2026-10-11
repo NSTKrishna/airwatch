@@ -5,6 +5,7 @@ import { api } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { fmtNumber, fmtRelative, verdictOf } from '../../lib/format.js';
 import MapLegend from '../../components/MapLegend.jsx';
+import { DemoTag } from '../../components/civic.jsx';
 import SiteMap from '../../components/SiteMap.jsx';
 import { LocalityTrendChart } from '../../components/charts.jsx';
 import { Button, LoadError, Notice, Panel, Skeleton, VerdictBadge } from '../../components/ui.jsx';
@@ -12,7 +13,7 @@ import { Button, LoadError, Notice, Panel, Skeleton, VerdictBadge } from '../../
 function StatStrip({ summary }) {
   const stats = [
     { label: 'Total reports', value: summary.totalReports, to: '/municipal/complaints', note: `${summary.awaitingReview} awaiting review` },
-    { label: 'Active anomalies', value: summary.activeAnomalies, to: '#flagged', note: `of ${summary.monitoredSites} monitored sites`, alert: summary.activeAnomalies > 0 },
+    { label: 'Unexpected PM10 readings', value: summary.activeAnomalies, to: '#flagged', note: `across ${summary.monitoredSites} demo sites`, alert: summary.activeAnomalies > 0 },
     { label: 'Pending inspections', value: summary.pendingInspections, to: '/municipal/complaints?status=INSPECTION_ASSIGNED', note: 'assigned, not yet closed' },
     { label: 'Resolved cases', value: summary.resolvedCases, to: '/municipal/complaints?status=RESOLVED', note: `${summary.rejectedCases} rejected` },
   ];
@@ -38,12 +39,12 @@ function SitePopup({ site }) {
   return (
     <div className="min-w-44">
       <p className="font-semibold">{site.name}</p>
-      <p className="text-ink-2">{site.locality.name} ward · {site.code} · DEMO monitor at a verified project</p>
+      <p className="text-ink-2">{site.locality.name} ward · {site.code} · Demo Data</p>
       <div className="mt-1.5"><VerdictBadge verdict={site.verdict} /></div>
       {site.latest ? (
         <p className="num mt-1.5">
           PM10 {fmtNumber(site.latest.site.ugm3)} · PM2.5 {fmtNumber(site.latest.site.pm25Ugm3)} · Background {fmtNumber(site.latest.background.ugm3)} µg/m³
-          {e?.status === 'EVALUATED' ? <><br />Difference {fmtNumber(e.observedDifference)} vs barrier {fmtNumber(e.dynamicBarrier)}</> : null}
+          {e?.status === 'EVALUATED' ? <><br />PM10 difference from background {fmtNumber(e.observedDifference)} µg/m³</> : null}
         </p>
       ) : null}
       <p className="mt-1.5">
@@ -88,15 +89,15 @@ export default function Overview() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Operations overview</h1>
-          <p className="mt-0.5 text-[0.875rem] text-ink-2">{latestAt ? `Sensors last read ${fmtRelative(latestAt)}` : 'Waiting for the first sensor sweep'}</p>
+          <p className="mt-0.5 text-[0.875rem] text-ink-2">{latestAt ? `Demo readings updated ${fmtRelative(latestAt)}` : 'Waiting for demo readings'}</p>
         </div>
         <Button variant="secondary" icon={RefreshCw} loading={sweeping} onClick={sweep}>Read sensors now</Button>
       </div>
 
       {sweepError ? <Notice tone="flag" title={`Sweep failed: ${sweepError}`} /> : null}
       {status && !status.model.ready ? (
-        <Notice tone="flag" title="No anomaly assessments are being produced">
-          The model service reports: {status.model.reason}. Readings are still recorded, and citizens can still file reports. Nothing is marked normal or flagged until the model responds.
+        <Notice tone="flag" title="Assessment unavailable">
+          Incoming demo readings are still saved. PM10 results will appear again when assessment service recovers.
         </Notice>
       ) : null}
 
@@ -113,8 +114,8 @@ export default function Overview() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section id="flagged" aria-labelledby="map-heading" className="scroll-mt-6">
           <div className="mb-2 flex items-baseline justify-between gap-3">
-            <h2 id="map-heading" className="font-semibold">Monitoring sites</h2>
-            <p className="text-[0.8125rem] text-ink-2">{flaggedSites.length} of {sites.length} sites flagged</p>
+            <div className="flex items-center gap-2"><h2 id="map-heading" className="font-semibold">Monitoring sites</h2><DemoTag>Demo Data</DemoTag></div>
+            <p className="text-[0.8125rem] text-ink-2">{flaggedSites.length} of {sites.length} sites need review</p>
           </div>
           {flagged.error && !flagged.data ? <LoadError error={flagged.error} onRetry={flagged.reload} />
             : flagged.data ? <SiteMap label="Map of monitored construction sites" className="h-[26rem]" sites={sites} renderPopup={(site) => <SitePopup site={site} />} />
@@ -124,13 +125,13 @@ export default function Overview() {
 
         <div className="space-y-5">
           <Panel>
-            <h2 className="border-b border-line px-4 py-3 font-semibold">Currently flagged</h2>
+            <h2 className="border-b border-line px-4 py-3 font-semibold">Readings needing review</h2>
             {flaggedSites.length === 0 ? (
               <p className="flex items-start gap-2 px-4 py-4 text-[0.875rem] text-ink-2">
                 <CircleCheck className="mt-0.5 size-4 shrink-0 text-ok" aria-hidden />
                 {summary.data?.sitesWithoutAssessment === sites.length && sites.length > 0
                   ? 'No site has a current assessment, so nothing can be flagged.'
-                  : 'No site is above its dynamic barrier right now.'}
+                  : 'No unexpected PM10 readings right now.'}
               </p>
             ) : (
               <ul className="divide-y divide-line">
@@ -153,7 +154,7 @@ export default function Overview() {
                 ))}
               </ul>
             )}
-            <p className="border-t border-line px-4 py-2.5 text-[0.75rem] text-ink-3">A flag is evidence for review, not a finding of violation.</p>
+            <p className="border-t border-line px-4 py-2.5 text-[0.75rem] text-ink-3">An unexpected reading is a review signal, not proof of a violation.</p>
           </Panel>
 
           <Panel>

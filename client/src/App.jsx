@@ -10,6 +10,7 @@ const MapHome = lazy(() => import('./pages/public/MapHome.jsx'));
 const ProjectPanel = lazy(() => import('./pages/public/ProjectPanel.jsx'));
 const ReportPanel = lazy(() => import('./pages/public/ReportPanel.jsx'));
 const WardPanel = lazy(() => import('./pages/public/WardPanel.jsx'));
+const Methodology = lazy(() => import('./pages/public/Methodology.jsx'));
 const Track = lazy(() => import('./pages/public/Track.jsx'));
 const ReportForm = lazy(() => import('./pages/citizen/Report.jsx'));
 const MyComplaints = lazy(() => import('./pages/citizen/Complaints.jsx'));
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="ward/:slug" element={<WardPanel />} />
         </Route>
         <Route path="/track" element={<Track />} />
+        <Route path="/methodology" element={<Methodology />} />
         <Route path="/citizen" element={<Navigate to="/" replace />} />
         <Route element={<RequireRole role="CITIZEN" />}>
           <Route path="/citizen/report" element={<ReportForm />} />

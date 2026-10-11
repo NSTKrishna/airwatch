@@ -1,7 +1,7 @@
 import { Suspense, useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Skeleton } from './ui.jsx';
-import { ChartNoAxesCombined, CircleCheck, CircleDashed, FlaskConical, Inbox, LayoutDashboard, Map as MapIcon, RadioTower, SlidersHorizontal } from 'lucide-react';
+import { ChartNoAxesCombined, FlaskConical, Inbox, LayoutDashboard, Map as MapIcon, RadioTower, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../lib/auth.jsx';
 import { useI18n } from '../lib/i18n.jsx';
 import { useApi } from '../lib/useApi.js';
@@ -15,23 +15,6 @@ const NAV = [
   { to: '/municipal/simulator', label: 'Sensor simulator', icon: SlidersHorizontal },
   { to: '/', end: true, label: 'Public map', icon: MapIcon },
 ];
-
-function ModelStatus({ status }) {
-  if (!status) return null;
-  const ready = status.model.ready;
-  return (
-    <div className="rounded-lg border border-line-strong bg-surface p-3 text-[0.8125rem]">
-      <p className={`flex items-center gap-1.5 font-semibold ${ready ? 'text-ok' : 'text-flag'}`}>
-        {ready ? <CircleCheck className="size-4" aria-hidden /> : <CircleDashed className="size-4" aria-hidden />}
-        {ready ? 'Model online' : 'Model unavailable'}
-      </p>
-      <p className="mt-1 break-words text-ink-2">
-        {ready ? status.model.version : `${status.model.reason}. Readings are stored without an anomaly assessment.`}
-      </p>
-      {ready ? <p className="mt-1 text-ink-2">{status.model.limitations}</p> : null}
-    </div>
-  );
-}
 
 export default function MunicipalLayout() {
   const { user } = useAuth();
@@ -56,7 +39,7 @@ export default function MunicipalLayout() {
           ))}
         </nav>
         <div className="mt-auto hidden space-y-3 p-3 lg:block">
-          <ModelStatus status={status} />
+          <Link to="/methodology" className="block px-1 text-[0.75rem] font-medium text-ink-2 underline hover:text-ink">Data &amp; Methodology</Link>
           <div className="flex items-center justify-between gap-2 px-1">
             <div className="min-w-0">
               <p className="truncate text-[0.875rem] font-medium">{user.name}</p>
@@ -70,11 +53,11 @@ export default function MunicipalLayout() {
       <div className="min-w-0">
         <p className="border-b border-warn-line bg-warn-soft px-4 py-1 text-[0.75rem] text-warn lg:px-8">
           <FlaskConical className="mr-1 inline size-3 -translate-y-px" aria-hidden />
-          Demonstration system, not an official BMC service. Actions here are demo reviews, not BMC acknowledgments. {status?.sensors.devices.real ? 'Most monitors are simulated; each reading is labelled with its source.' : 'Projects are real public records; monitors and readings are simulated.'}
+          Demo system · Not an official BMC service · Reviews are for the pilot; monitoring data is labelled as simulated or physical.
         </p>
         {status && !status.model.ready ? (
-          <p className="border-b border-flag-line bg-flag-soft px-4 py-1.5 text-[0.8125rem] text-flag lg:hidden">
-            Model unavailable: {status.model.reason}. No anomaly assessments are being produced.
+          <p className="border-b border-flag-line bg-flag-soft px-4 py-1.5 text-[0.8125rem] text-flag">
+            Assessment unavailable. Incoming readings are still saved; review them again later.
           </p>
         ) : null}
         <main className="mx-auto max-w-[82rem] px-4 py-5 lg:px-8 lg:py-7">

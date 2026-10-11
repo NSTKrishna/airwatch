@@ -31,8 +31,13 @@ test('the map is readable without an account, and says what it is', async () => 
   }
   assert.ok(o.wards.filter((w) => !w.pilot).every((w) => w.counts === null && w.office === null));
   assert.equal(o.totals.projects, ctx.projects.length);
-  assert.match(o.model.limitations, /not been validated for Mumbai/);
-  assert.equal(o.sensors.simulated, true);
+  assert.equal('model' in o, false, 'model diagnostics are kept off the public map overview');
+  assert.equal('sensors' in o, false, 'sensor diagnostics are kept off the public map overview');
+  const methodology = (await api('GET', '/public/methodology')).body;
+  assert.match(methodology.model.limitations, /not been validated for Mumbai/);
+  assert.equal(typeof methodology.model.algorithm, 'string');
+  assert.ok(methodology.model.calibration && methodology.model.features.length > 0);
+  assert.equal(methodology.monitoring.simulated, true);
   assert.ok(o.dustAuthority.summary && o.dustAuthority.sourceUrls.length && o.dustAuthority.channels.length);
 
   const boundaries = (await api('GET', '/public/boundaries')).body;

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Camera, ChevronRight, Clock, Droplets, Thermometer } from 'lucide-react';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
-import { domainWarningList, fmtNumber, fmtRelative, fmtTime, noAssessmentReason, verdictOf } from '../../lib/format.js';
+import { fmtNumber, fmtRelative, fmtTime, noAssessmentReason, verdictOf } from '../../lib/format.js';
 import { DifferenceChart, ParticulateChart, SERIES, SingleSeriesChart } from '../../components/charts.jsx';
 import { DemoTag, RecordTag, Sources } from '../../components/civic.jsx';
 import { Metric, ReadingComparison } from '../../components/Reading.jsx';
@@ -27,7 +27,6 @@ function Monitor({ monitor }) {
   const verdict = verdictOf(latest);
   const evaluated = evaluation?.status === 'EVALUATED';
   const why = noAssessmentReason({ withheld: monitor.withheld, latest });
-  const warned = verdict !== 'none' ? domainWarningList(evaluation) : '';
   const points = history.data?.points || [];
   const n = (v, digits = 1) => fmtNumber(v, digits, locale);
 
@@ -53,7 +52,7 @@ function Monitor({ monitor }) {
             <Metric label={<span className="inline-flex items-center gap-1"><Thermometer className="size-3.5" aria-hidden />{t('sensor.temperature')}</span>} value={n(latest.weather.temperatureC)} unit="°C" />
             <Metric label={<span className="inline-flex items-center gap-1"><Droplets className="size-3.5" aria-hidden />{t('sensor.humidity')}</span>} value={n(latest.weather.humidityPct, 0)} unit="%" />
           </dl>
-          {warned ? <div className="mt-4"><Notice tone="warn">{t('verdict.domainWarning', { list: warned })}</Notice></div> : null}
+          {evaluation?.domainWarnings?.length ? <Notice tone="warn">This demo reading is outside supported conditions. Treat it as a signal for review.</Notice> : null}
           <p className="mt-4 inline-flex items-center gap-1 text-[0.8125rem] text-ink-2">
             <Clock className="size-3.5" aria-hidden />{t('monitor.measuredAt', { time: `${fmtTime(latest.site.timestamp, locale)} (${fmtRelative(latest.site.timestamp, locale)})` })}
           </p>
@@ -106,11 +105,10 @@ function Monitor({ monitor }) {
           <ChevronRight className="size-3.5 transition-transform duration-150 group-open:rotate-90" aria-hidden />{t('monitor.details')}
         </summary>
         <ul className="mt-2 space-y-1.5 text-ink-2">
-          {evaluated ? <li className="break-all">{t('monitor.model')}: <span className="text-ink">{evaluation.model?.version}</span></li> : null}
           <li>{t('sensor.background', { distance: fmtNumber(monitor.background.distanceM, 0, locale) })}</li>
           <li>{t('monitor.pm25Note')}</li>
           <li>{t('monitor.barrierHelp')}</li>
-          <li>{t('monitor.modelNote')}</li>
+          <li><Link className="font-medium text-accent underline" to="/methodology">{t('method.link')}</Link></li>
         </ul>
       </details>
     </>

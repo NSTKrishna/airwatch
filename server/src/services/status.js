@@ -18,9 +18,12 @@ export async function systemStatus() {
       reason: info.reason,
       version: info.version,
       algorithm: info.algorithm ?? null,
+      artifactVersion: info.artifactVersion ?? null,
       dataSource: info.dataSource ?? null,
       syntheticOnly: info.syntheticOnly ?? null,
       calibratedMargin: info.calibratedMargin ?? null,
+      features: info.features ?? [],
+      calibration: info.calibration ?? null,
       measurement: info.measurement ?? null,
       // Facts about the deployed artifact that every consumer of a verdict should know.
       scope: 'Estimates the normal current PM10 site-minus-background difference. It does not forecast AQI, assess PM2.5, or detect tampering.',

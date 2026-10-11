@@ -134,7 +134,6 @@ function SensorEvidence({ complaint }) {
   const background = anomaly ? anomaly.backgroundValue : snapshot.background?.ugm3;
   const site = anomaly ? anomaly.siteValue : snapshot.site?.ugm3;
   const source = anomaly ? anomaly.dataSource : snapshot.dataSource;
-  const warned = (evaluation?.domainWarnings || []).map((w) => w.feature).join(', ');
   const evaluated = evaluation?.status === 'EVALUATED';
   return (
     <div className="mt-3">
@@ -142,25 +141,18 @@ function SensorEvidence({ complaint }) {
         <VerdictBadge verdict={anomaly ? 'flagged' : evaluated && !evaluation.isAnomaly ? 'normal' : 'none'} />
         <SourceTag source={source} />
         <span className="text-[0.8125rem] text-ink-2">
-          {anomaly ? 'Anomaly active when the complaint was filed' : evaluated ? 'No anomaly at filing; reading recorded for reference' : `No assessment at filing: ${evaluation?.reason || 'no reading'}`}
+          {anomaly ? 'Unexpected PM10 reading when the report was filed' : evaluated ? 'Within expected range when filed' : 'Assessment unavailable when filed'}
         </span>
       </div>
       <ReadingComparison background={background} site={site} pm25={anomaly ? undefined : snapshot.site?.pm25Ugm3} evaluation={evaluation} />
-      {warned ? <div className="mt-4"><Notice tone="warn">Inputs outside the model's trained range: {warned}. Treat this result with extra caution.</Notice></div> : null}
-      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem] text-ink-2">
-        <dt>Site reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.siteTimestamp : snapshot.site?.timestamp)}</dd>
-        <dt>Background reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.backgroundTimestamp : snapshot.background?.timestamp)}</dd>
-        {evaluated ? (
-          <>
-            <dt>Expected difference</dt><dd className="num text-ink">{evaluation.expectedNormalDifference.toFixed(2)} µg/m³</dd>
-            <dt>Calibrated margin</dt><dd className="num text-ink">{evaluation.calibratedMargin.toFixed(2)} µg/m³</dd>
-            <dt>Model version</dt><dd className="break-all text-ink">{evaluation.model?.version}</dd>
-            <dt>Model inputs</dt>
-            <dd className="num text-ink">{Object.entries(evaluation.features || {}).map(([k, v]) => `${k} ${Number(v).toFixed(2)}`).join(' · ')}</dd>
-          </>
-        ) : null}
-      </dl>
-      <p className="mt-3 text-[0.8125rem] text-ink-2">{evaluation?.interpretation || 'Evidence for review; not proof of a construction violation'}. The model was trained on synthetic Delhi data and is not validated for Mumbai.</p>
+      <details className="mt-4 text-[0.8125rem]">
+        <summary className="cursor-pointer font-medium text-accent">Reading details and limitations</summary>
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-ink-2">
+          <dt>Site reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.siteTimestamp : snapshot.site?.timestamp)}</dd>
+          <dt>Background reading at</dt><dd className="num text-ink">{fmtDateTime(anomaly ? anomaly.backgroundTimestamp : snapshot.background?.timestamp)}</dd>
+        </dl>
+        <p className="mt-2 text-ink-2">Demo readings are simulated and are not proof of a rule violation or that a site caused dust. <Link className="font-medium text-accent underline" to="/methodology">Data &amp; Methodology</Link></p>
+      </details>
     </div>
   );
 }
