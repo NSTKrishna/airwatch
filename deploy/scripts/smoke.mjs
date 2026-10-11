@@ -11,22 +11,20 @@
 //
 //   --require-model   fail unless a fresh simulated reading has a Random Forest assessment
 //   --web <url>       also check that the frontend answers and serves the app shell
-//   --insecure        accept a self-signed certificate (the local stack's own CA)
 //   --wait <seconds>  how long to wait for the stack to become ready (default 120)
 import { parseArgs } from 'node:util';
 
 const { values: opt } = parseArgs({
   options: {
     api: { type: 'string' }, web: { type: 'string' }, full: { type: 'boolean', default: false },
-    'require-model': { type: 'boolean', default: false }, insecure: { type: 'boolean', default: false },
+    'require-model': { type: 'boolean', default: false },
     wait: { type: 'string', default: '120' },
   },
 });
 if (!opt.api) {
-  console.error('usage: smoke.mjs --api <origin of the API> [--web <origin of the frontend>] [--full] [--require-model] [--insecure]');
+  console.error('usage: smoke.mjs --api <origin of the API> [--web <origin of the frontend>] [--full] [--require-model]');
   process.exit(2);
 }
-if (opt.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const API = `${opt.api.replace(/\/+$/, '')}/api`;
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
@@ -84,7 +82,12 @@ async function readOnly() {
   check('public overview lists the pilot wards', overview.status === 200 && pilot.length >= 1, `${pilot.length} pilot wards, ${overview.body.totals?.projects} projects`);
   check('the stack says it is not an official service', overview.body.official === false);
   const methodology = await call('GET', '/public/methodology');
-  check('sensors are declared simulated', methodology.status === 200 && methodology.body.monitoring?.simulated === true && methodology.body.monitoring?.physicalDevices === 0);
+  const monitoring = methodology.body.monitoring;
+  check('sensors are declared simulated', methodology.status === 200
+    && monitoring?.simulated === true
+    && Number(monitoring.simulatedDevices) > 0
+    && monitoring.physicalDevices === 0,
+  `${monitoring?.simulatedDevices ?? 0} simulated, ${monitoring?.physicalDevices ?? 'unknown'} physical`);
 
   const boundaries = await call('GET', '/public/boundaries');
   check('ward boundaries are served', boundaries.status === 200 && boundaries.body.features?.length > 0, `${boundaries.body.features?.length} wards`);
@@ -106,12 +109,18 @@ async function readOnly() {
     await sleep(10_000);
   }
   check('simulated readings are arriving', fresh.length > 0, `${fresh.length} of ${monitors.length} monitors reported in the last 5 minutes`);
-  check('every reading is marked SIMULATED', monitors.every((p) => p.monitor.latest.dataSource === 'SIMULATED' && p.monitor.device.provenance === 'SIMULATED'));
+  check('public monitors identify DEMO sensors', monitors.length > 0 && monitors.every((p) => p.monitor.device?.provenance === 'SIMULATED'
+    && p.monitor.device.deviceId?.startsWith('DEMO-')
+    && p.monitor.background?.simulated === true));
+  check('every reading is marked SIMULATED', monitors.length > 0 && monitors.every((p) => p.monitor.latest.dataSource === 'SIMULATED'));
   const assessed = fresh.filter((p) => p.monitor.latest.evaluation?.status === 'EVALUATED');
   if (opt['require-model']) {
     const sample = assessed[0]?.monitor.latest.evaluation;
-    check('readings carry a Random Forest assessment', assessed.length > 0,
-      sample ? `${assessed.length} assessed; e.g. difference ${Number(sample.observedDifference).toFixed(2)} against barrier ${Number(sample.dynamicBarrier).toFixed(2)}, model ${overview.body.model?.version}` : 'no reading was assessed');
+    const modelVersion = sample?.model?.version;
+    const modelAlgorithm = sample?.model?.algorithm;
+    const isRandomForest = typeof modelAlgorithm === 'string' && /random\s*forest|randomforest/i.test(modelAlgorithm);
+    check('readings carry a Random Forest assessment', assessed.length > 0 && isRandomForest && typeof modelVersion === 'string' && modelVersion.length > 0,
+      sample ? `${assessed.length} assessed; e.g. difference ${Number(sample.observedDifference).toFixed(2)} against barrier ${Number(sample.dynamicBarrier).toFixed(2)}, model ${modelAlgorithm ?? 'unknown'} (${modelVersion ?? 'version unavailable'})` : 'no reading was assessed');
     const flagged = assessed.filter((p) => p.monitor.latest.evaluation.isAnomaly).length;
     pass('PM10 flags on the public map right now', `${flagged} flagged, ${assessed.length - flagged} within range`);
   } else {
