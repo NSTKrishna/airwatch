@@ -75,7 +75,7 @@ router.post('/', requireRole('CITIZEN'), imageUpload(4).array('photos', 4), asyn
   }));
 
   const full = await prisma.complaint.findUnique({ where: { id: complaint.id }, include: complaintDetailInclude });
-  res.status(201).json({ complaint: complaintCitizenView(full, { detail: true }) });
+  res.status(201).json({ complaint: complaintCitizenView(full, { detail: true, viewerId: req.user.id }) });
 });
 
 router.get('/', requireRole('CITIZEN'), async (req, res) => {
@@ -91,7 +91,7 @@ router.get('/:id', requireRole('CITIZEN'), async (req, res) => {
   const complaint = await prisma.complaint.findUnique({ where: { id: req.params.id }, include: complaintDetailInclude });
   // Same response for "missing" and "someone else's" so ids cannot be probed.
   if (!complaint || complaint.citizenId !== req.user.id) throw notFound('Complaint not found');
-  res.json({ complaint: complaintCitizenView(complaint, { detail: true }), dustAuthority: DUST_AUTHORITY });
+  res.json({ complaint: complaintCitizenView(complaint, { detail: true, viewerId: req.user.id }), dustAuthority: DUST_AUTHORITY });
 });
 
 // --- Citizen follow-up: the independent side of a case ---
@@ -120,8 +120,9 @@ const followUpSchema = z.object({
 
 const followUpUpload = imageUpload(5).fields([{ name: 'photos', maxCount: 4 }, { name: 'acknowledgment', maxCount: 1 }]);
 
-// Any signed-in citizen can add to a public case, not only the person who reported it: a
-// neighbour or a resident group can file officially, or go and look, on the reporter's behalf.
+// Other citizens can add moderated site observations. Official filings, replies, generic
+// case notes, and closure disputes belong to the report owner; another resident files their
+// own report first if they want a separate official reference under their identity.
 router.post('/reports/:reference/follow-ups', requireRole('CITIZEN'), followUpUpload, async (req, res) => {
   const input = parse(followUpSchema, req.body);
   const match = /^AW-(\d{4})-(\d{1,9})$/i.exec(req.params.reference.trim());
@@ -130,13 +131,19 @@ router.post('/reports/:reference/follow-ups', requireRole('CITIZEN'), followUpUp
   }) : null;
   if (!complaint || new Date(complaint.createdAt).getUTCFullYear() !== Number(match[1])) throw notFound('Report not found');
 
+  const ownerOnly = new Set(['OFFICIAL_COMPLAINT', 'OFFICIAL_RESPONSE', 'DISPUTE_CLOSURE', 'NOTE']);
+  const communityObservations = new Set(['STILL_UNRESOLVED', 'IMPROVEMENT_OBSERVED']);
+  if (complaint.citizenId !== req.user.id && (!communityObservations.has(input.kind) || ownerOnly.has(input.kind))) {
+    throw forbidden('Only the person who filed this report can manage its official complaint details');
+  }
+
   const base = { complaintId: complaint.id, uploadedById: req.user.id };
   await addFollowUp(complaint, req.user, { ...input, occurredOn: input.occurredOn ? new Date(`${input.occurredOn}T00:00:00Z`) : undefined }, {
     photoRows: toAttachmentRows(req.files?.photos, { ...base, kind: 'FOLLOW_UP_PHOTO' }),
     acknowledgmentRows: toAttachmentRows(req.files?.acknowledgment, { ...base, kind: 'OFFICIAL_ACKNOWLEDGMENT' }),
   });
   const full = await prisma.complaint.findUnique({ where: { id: complaint.id }, include: complaintDetailInclude });
-  const view = complaintCitizenView(full, { detail: true });
+  const view = complaintCitizenView(full, { detail: true, viewerId: req.user.id });
   // Someone who is not the reporter gets the trail and the positions, not the reporter's own page.
   res.status(201).json(full.citizenId === req.user.id ? { complaint: view } : { complaint: { reference: view.reference, positions: view.positions, followUps: view.followUps } });
 });

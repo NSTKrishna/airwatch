@@ -316,8 +316,6 @@ const SignInToAdd = () => {
 const SITE_ACTIONS = [
   { kind: 'STILL_UNRESOLVED', icon: TriangleAlert, on: 'border-report bg-[#fdf0e8] text-report' },
   { kind: 'IMPROVEMENT_OBSERVED', icon: ThumbsUp, on: 'border-ok bg-ok-soft text-ok' },
-  { kind: 'DISPUTE_CLOSURE', icon: Scale, on: 'border-report bg-[#fdf0e8] text-report', closedOnly: true },
-  { kind: 'NOTE', icon: MessageSquarePlus, on: 'border-accent bg-accent-soft text-accent-strong' },
 ];
 
 /**
@@ -325,13 +323,13 @@ const SITE_ACTIONS = [
  * status set by AirWatch or BMC can give. Any signed-in citizen may add to a case; the case
  * desk checks follow-ups from its own screens instead.
  */
-export function SiteCheck({ report, channels, onChanged }) {
+export function SiteCheck({ report, channels, onChanged, owner = false }) {
   const { t } = useI18n();
   const { user } = useAuth();
   const [kind, setKind] = useState(null);
   const [added, setAdded] = useState(false);
   if (user?.role === 'MUNICIPAL') return null;
-  const actions = SITE_ACTIONS.filter((a) => !a.closedOnly || CLOSED.has(report.status));
+  const actions = SITE_ACTIONS;
   return (
     <div>
       {added ? <div className="mb-3"><Notice tone="ok" icon={CircleCheck} title={t('form.added')} /></div> : null}
@@ -355,6 +353,7 @@ export function SiteCheck({ report, channels, onChanged }) {
         </>
       ) : <div className="mt-2.5"><SignInToAdd /></div>}
       <p className="mt-2.5 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><Users className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('action.anyone')}</p>
+      {owner && CLOSED.has(report.status) ? <div className="mt-3 rounded-lg border border-line bg-paper p-3 text-sm"><strong>{t('detail.closureDispute')}</strong><p className="mt-1 text-ink-2">{t('detail.closureDisputeHelp')}</p><Button variant="secondary" size="sm" className="mt-2" onClick={() => { setAdded(false); setKind(kind === 'DISPUTE_CLOSURE' ? null : 'DISPUTE_CLOSURE'); }}>{t('detail.disputeClosure')}</Button></div> : null}
     </div>
   );
 }

@@ -117,7 +117,8 @@ export default function ComplaintDetail() {
 
         <aside className="contents lg:block lg:space-y-5">
           <Panel className="order-1 p-4 sm:p-5">
-            <h2 className="font-semibold">{t('detail.yourReport')}</h2>
+            <h2 className="font-semibold">{t('detail.manageReport')}</h2>
+            <p className="mt-1 text-sm text-ink-2">{t('detail.manageReportHelp')}</p>
             {lead ? (
               <div className="mt-3">
                 <div className="overflow-hidden rounded-lg border border-line"><AuthImage url={lead.url} alt={t('pub.photoAlt', { n: 1 })} className="aspect-[4/3] w-full" /></div>
@@ -150,7 +151,7 @@ export default function ComplaintDetail() {
           {c.positions ? (
             <Panel id="site-check" tabIndex={-1} className="order-2 scroll-mt-4 p-4 outline-none sm:p-5">
               <h2 className="mb-1.5 font-semibold">{t('site.title')}</h2>
-              <SiteCheck report={c} channels={data.dustAuthority.channels} onChanged={reload} />
+              <SiteCheck report={c} channels={data.dustAuthority.channels} onChanged={reload} owner />
             </Panel>
           ) : null}
 

@@ -13,6 +13,7 @@ import { prisma } from '../db.js';
 import { notFound } from '../lib/errors.js';
 import { readAttachment } from '../lib/storage.js';
 import { parse } from '../middleware/validate.js';
+import { optionalAuth } from '../middleware/auth.js';
 import { outcomeCounts } from '../services/followUps.js';
 import { systemStatus } from '../services/status.js';
 import {
@@ -189,12 +190,12 @@ router.get('/reports', async (req, res) => {
 });
 
 // References look like AW-2026-00042.
-router.get('/reports/:reference', async (req, res) => {
+router.get('/reports/:reference', optionalAuth, async (req, res) => {
   const match = /^AW-(\d{4})-(\d{1,9})$/i.exec(req.params.reference.trim());
   const complaint = match ? await prisma.complaint.findFirst({ where: { ...publicComplaintWhere, seq: Number(match[2]) }, include: complaintDetailInclude }) : null;
   // A hidden report answers exactly like one that does not exist.
   if (!complaint || new Date(complaint.createdAt).getUTCFullYear() !== Number(match[1])) throw notFound('Report not found');
-  res.json({ report: complaintPublicView(complaint, { detail: true }), dustAuthority: DUST_AUTHORITY });
+  res.json({ report: complaintPublicView(complaint, { detail: true, viewerId: req.user?.id }), dustAuthority: DUST_AUTHORITY });
 });
 
 const locateQuery = z.object({ lat: z.coerce.number().min(-90).max(90), lng: z.coerce.number().min(-180).max(180) });

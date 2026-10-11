@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { ChevronRight, CircleCheck, EyeOff, MapPin, Radio } from 'lucide-react';
+import { CircleCheck, EyeOff, MapPin, Radio } from 'lucide-react';
 import { apiUrl } from '../../lib/api.js';
 import { useApi } from '../../lib/useApi.js';
 import { useI18n } from '../../lib/i18n.jsx';
 import { fmtRelative } from '../../lib/format.js';
-import { CasePositions, EvidenceTrail, NextStep, OfficialFlow, PhotoGrid, ShareCase, SiteCheck } from '../../components/CaseRecord.jsx';
+import { CasePositions, EvidenceTrail, PhotoGrid, ShareCase, SiteCheck } from '../../components/CaseRecord.jsx';
 import { DemoTag, WardOffice } from '../../components/civic.jsx';
 import { SheetBody, SheetHeader, SheetSection } from '../../components/Sheet.jsx';
 import { LoadError, Notice, Skeleton, StatusPill } from '../../components/ui.jsx';
@@ -41,33 +41,41 @@ export default function ReportPanel() {
 
         <SheetSection title={t('case.title')}>
           <CasePositions report={r} />
-          <div className="mt-3"><NextStep report={r} /></div>
+          <p className="mt-3 text-[0.8125rem] text-ink-2">{t('pub.notOfficial')}</p>
         </SheetSection>
 
-        <SheetSection title={t('site.title')}>
-          <SiteCheck report={r} channels={data.dustAuthority.channels} onChanged={reload} />
-          <div className="mt-4 border-t border-line pt-3">
-            <h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">{t('share.title')}</h3>
-            <ShareCase report={r} />
+        <SheetSection title={t('pub.whatWasReported')}>
+          {r.description ? <p className="max-w-[65ch] text-[0.9375rem] whitespace-pre-line">{r.description}</p>
+            : <p className="flex items-start gap-2 text-[0.875rem] text-ink-2"><EyeOff className="mt-0.5 size-4 shrink-0" aria-hidden />{t('pub.withheld', { count: r.photoCount })}</p>}
+          <p className="mt-3 flex items-start gap-1.5 text-[0.8125rem] text-ink-2">
+            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            {r.project ? <Link to={`/project/${r.project.code}`} className="font-medium text-accent underline">{r.project.name}</Link> : t('pub.approximate')}
+          </p>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-sm font-medium text-accent underline">{t('pub.expandEvidence')}</summary>
+            <PhotoGrid className="mt-3" lead demo={r.isDemo} label={t('pub.photos')}
+              photos={r.photos.map((photo, i) => ({ id: photo.id, src: apiUrl(photo.url), alt: t('pub.photoAlt', { n: i + 1 }) }))} />
+            {r.hasSensorFlag ? <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><Radio className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('pub.sensorFlag')}</p> : null}
+          </details>
+        </SheetSection>
+
+        <SheetSection title={t('pub.communityActions')}>
+          <p className="mb-3 text-[0.875rem] text-ink-2">{t('pub.communityGuidance')}</p>
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/citizen/report?${r.project?.code ? `project=${encodeURIComponent(r.project.code)}` : r.ward?.slug ? `ward=${encodeURIComponent(r.ward.slug)}` : ''}`} className="inline-flex min-h-10 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-white">{t('pub.reportSameIssue')}</Link>
+            <a href="#site-check" className="inline-flex min-h-10 items-center rounded-lg border border-line-strong px-3 text-sm font-semibold">{t('pub.addObservation')}</a>
           </div>
+          {r.ownerReportId ? <p className="mt-3 text-[0.875rem]"><Link className="font-medium text-accent underline" to={`/citizen/complaints/${r.ownerReportId}`}>{t('detail.manageReport')}</Link></p> : null}
+          <div className="mt-4 border-t border-line pt-3"><h3 className="mb-2 text-[0.8125rem] font-medium text-ink-2">{t('share.title')}</h3><ShareCase report={r} /></div>
         </SheetSection>
 
-        {r.status === 'REJECTED' ? null : (
-          <SheetSection>
-            <details className="group" open={r.positions.official.state === 'NONE'}>
-              <summary className="flex list-none items-center gap-1.5 text-[0.9375rem] font-semibold [&::-webkit-details-marker]:hidden">
-                <ChevronRight className="size-4 transition-transform duration-150 group-open:rotate-90" aria-hidden />{t('kit.title')}
-              </summary>
-              <div className="mt-3">
-                <OfficialFlow report={r} wardOffice={r.wardOffice} authority={data.dustAuthority} onChanged={reload} />
-              </div>
-            </details>
-          </SheetSection>
-        )}
+        <div id="site-check"><SheetSection title={t('site.title')}><SiteCheck report={r} channels={data.dustAuthority.channels} onChanged={reload} /></SheetSection></div>
 
         <SheetSection title={t('trail.title')}>
+          <details>
+          <summary className="mb-3 cursor-pointer text-sm font-medium text-accent underline">{t('pub.expandHistory')}</summary>
           <EvidenceTrail report={r} />
-          <p className="mt-4 text-[0.8125rem] text-ink-2">{t('pub.notOfficial')}</p>
+          </details>
         </SheetSection>
 
         {closed && (r.findings || r.correctiveAction) ? (
@@ -79,18 +87,6 @@ export default function ReportPanel() {
             <p className="mt-3 text-[0.8125rem] text-ink-2">{t('case.airwatch.outcomeNote')}</p>
           </SheetSection>
         ) : null}
-
-        <SheetSection title={t('pub.whatWasReported')}>
-          {r.description ? <p className="max-w-[65ch] text-[0.9375rem] whitespace-pre-line">{r.description}</p>
-            : <p className="flex items-start gap-2 text-[0.875rem] text-ink-2"><EyeOff className="mt-0.5 size-4 shrink-0" aria-hidden />{t('pub.withheld', { count: r.photoCount })}</p>}
-          <PhotoGrid className="mt-3" lead demo={r.isDemo} label={t('pub.photos')}
-            photos={r.photos.map((photo, i) => ({ id: photo.id, src: apiUrl(photo.url), alt: t('pub.photoAlt', { n: i + 1 }) }))} />
-          <p className="mt-3 flex items-start gap-1.5 text-[0.8125rem] text-ink-2">
-            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            {r.project ? <Link to={`/project/${r.project.code}`} className="font-medium text-accent underline">{r.project.name}</Link> : t('pub.approximate')}
-          </p>
-          {r.hasSensorFlag ? <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] text-ink-2"><Radio className="mt-0.5 size-3.5 shrink-0" aria-hidden />{t('pub.sensorFlag')}</p> : null}
-        </SheetSection>
 
         <SheetSection title={t('pub.routedTo')}>
           <WardOffice office={r.wardOffice} />

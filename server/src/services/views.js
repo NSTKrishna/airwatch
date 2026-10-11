@@ -2,7 +2,7 @@
 // separate functions so internal fields cannot leak by accident.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
-import { followUpInclude, followUpMunicipalView, followUpPublicView, positions } from './followUps.js';
+import { followUpInclude, followUpMunicipalView, followUpOwnerView, followUpPublicView, positions } from './followUps.js';
 import { isActiveAnomaly } from './monitoring.js';
 
 export const complaintReference = (c) => `AW-${new Date(c.createdAt).getUTCFullYear()}-${String(c.seq).padStart(5, '0')}`;
@@ -193,7 +193,7 @@ const complaintBase = (c) => ({
 // Citizens see public lifecycle events only: no internal notes, no officer identities.
 const CITIZEN_EVENT_TYPES = new Set(['SUBMITTED', 'STATUS_CHANGED']);
 
-export function complaintCitizenView(c, { detail = false } = {}) {
+export function complaintCitizenView(c, { detail = false, viewerId } = {}) {
   const view = complaintBase(c);
   if (!detail) return view;
   const closed = c.status === 'RESOLVED' || c.status === 'REJECTED';
@@ -209,7 +209,7 @@ export function complaintCitizenView(c, { detail = false } = {}) {
     timeline: (c.events || [])
       .filter((e) => CITIZEN_EVENT_TYPES.has(e.type))
       .map((e) => ({ id: e.id, type: e.type, fromStatus: e.fromStatus, toStatus: e.toStatus, createdAt: e.createdAt })),
-    followUps: (c.followUps || []).map((f) => followUpPublicView(f, c)),
+    followUps: (c.followUps || []).map((f) => f.authorId === viewerId ? followUpOwnerView(f, c) : followUpPublicView(f, c)),
   };
 }
 
@@ -310,7 +310,7 @@ const round3 = (v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : nul
  * inspection photographs. The pin sits on the named project, or within about 100 m of
  * where the citizen stood.
  */
-export function complaintPublicView(c, { detail = false } = {}) {
+export function complaintPublicView(c, { detail = false, viewerId } = {}) {
   const reviewed = c.status !== 'SUBMITTED';
   const closed = c.status === 'RESOLVED' || c.status === 'REJECTED';
   const onProject = c.project?.latitude != null;
@@ -336,6 +336,7 @@ export function complaintPublicView(c, { detail = false } = {}) {
   if (!detail) return view;
   return {
     ...view,
+    ...(viewerId && viewerId === c.citizenId ? { ownerReportId: c.id } : {}),
     wardOffice: wardOfficeView(c.ward),
     photos: reviewed ? photos.map((a) => ({ id: a.id, url: `/api/public/attachments/${a.id}`, mimeType: a.mimeType })) : [],
     findings: closed ? c.findings : null,

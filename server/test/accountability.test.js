@@ -143,6 +143,11 @@ test('a citizen finds a project, reports dust and gets a case link with three se
   assert.equal(r.positions.official.state, 'NONE');
   assert.equal(r.positions.citizen.state, 'NONE');
   assert.deepEqual(r.followUps, []);
+  assert.equal('ownerReportId' in r, false, 'the anonymous public view has no reporter identity or private report id');
+  const signedOwner = (await api('GET', `/public/reports/${ctx.report.reference}`, { token: tokens.citizen })).body.report;
+  assert.equal(signedOwner.ownerReportId, ctx.report.id, 'only the authenticated owner gets the manage-page link');
+  assert.equal('ownerReportId' in (await api('GET', `/public/reports/${ctx.report.reference}`, { token: tokens.other })).body.report, false);
+  assert.equal((await api('GET', `/complaints/${ctx.report.id}`, { token: tokens.other })).status, 404);
 
   // The stored photograph no longer carries the phone's metadata.
   const stored = await prisma.attachment.findFirst({ where: { complaintId: ctx.report.id } });
@@ -156,6 +161,9 @@ test('recording an official complaint filed elsewhere, and what a follow-up may 
   const filing = { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'marg-portal', officialReference: 'TEST-REF-4471', occurredOn: today() };
   assert.equal((await followUp(reference, undefined, filing)).status, 401);
   assert.equal((await followUp(reference, tokens.officer, filing)).status, 403);
+  assert.equal((await followUp(reference, tokens.other, filing)).status, 403, 'another citizen cannot add an official reference to the reporter\'s case');
+  assert.equal((await followUp(reference, tokens.other, { kind: 'OFFICIAL_RESPONSE', note: 'False BMC reply submitted by another resident.', occurredOn: today() }, { acknowledgment: PNG })).status, 403);
+  assert.equal((await followUp(reference, tokens.other, { kind: 'NOTE', note: 'An unrelated case update.' })).status, 403);
   assert.equal((await followUp('AW-2026-99999', tokens.citizen, filing)).status, 404);
   const missing = await followUp(reference, tokens.citizen, { kind: 'OFFICIAL_COMPLAINT' });
   assert.equal(missing.status, 400);
@@ -189,8 +197,12 @@ test('recording an official complaint filed elsewhere, and what a follow-up may 
   const [entry] = r.followUps;
   assert.deepEqual(
     { kind: entry.kind, track: entry.track, by: entry.by, check: entry.check, ref: entry.officialReference, channel: entry.officialChannel, ack: entry.hasAcknowledgment },
-    { kind: 'OFFICIAL_COMPLAINT', track: 'OFFICIAL', by: 'REPORTER', check: 'UNCHECKED', ref: 'TEST-REF-4471', channel: 'BMC MARG grievance portal', ack: true });
+    { kind: 'OFFICIAL_COMPLAINT', track: 'OFFICIAL', by: 'REPORTER', check: 'UNCHECKED', ref: null, channel: null, ack: false });
   assert.deepEqual(entry.photos, []);
+  const ownerDetail = (await api('GET', `/complaints/${id}`, { token: tokens.citizen })).body.complaint;
+  assert.equal(ownerDetail.followUps[0].officialReference, 'TEST-REF-4471');
+  assert.equal(ownerDetail.followUps[0].hasAcknowledgment, true);
+  assert.ok(ownerDetail.followUps[0].attachments.some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT'));
 
   // The acknowledgment document can carry personal details: the case desk sees it, the public never does.
   const file = await caseFile(id);
@@ -218,7 +230,7 @@ test('a moderator verifies the acknowledgment; that is not an AirWatch resolutio
   assert.equal(r.positions.airwatch.status, 'SUBMITTED');
   assert.equal(r.positions.citizen.state, 'NONE');
   assert.equal(r.followUps[0].check, 'VERIFIED');
-  assert.match(r.followUps[0].checkNote, /matches the acknowledgment/);
+  assert.equal(r.followUps[0].checkNote, null, 'moderator notes stay private');
   assert.equal((await api('GET', `/municipal/complaints?followUp=unchecked`, officer())).body.total, 0);
   assert.equal((await api('GET', `/complaints/${id}`, { token: tokens.citizen })).body.complaint.positions.official.state, 'ACKNOWLEDGED');
 });
@@ -276,7 +288,7 @@ test('residents add what they see on site; text and photographs wait for a moder
   r = await publicReport(reference);
   assert.deepEqual(r.positions.citizen.counts, { persists: 0, improved: 1, disputes: 0, residents: 1 });
   const aside = r.followUps.find((f) => f.id === seen.id);
-  assert.deepEqual({ check: aside.check, note: aside.note, photos: aside.photos, reason: aside.checkNote }, { check: 'SET_ASIDE', note: null, photos: [], reason: 'Photograph shows a different site.' });
+  assert.deepEqual({ check: aside.check, note: aside.note, photos: aside.photos, reason: aside.checkNote }, { check: 'SET_ASIDE', note: null, photos: [], reason: null });
 
   const raw = JSON.stringify((await api('GET', `/public/reports/${reference}`)).body);
   for (const secret of ['Asha Verma', 'Neighbour Nair', 'neighbour@example.com', 'citizen@airwatch.test', 'R. Malhotra']) assert.equal(raw.includes(secret), false, secret);
@@ -290,7 +302,8 @@ test('residents add what they see on site; text and photographs wait for a moder
 test('an official entry cannot be verified without the document it is checked against', async () => {
   const { reference, id } = ctx.report;
   // A second filing, by phone this time, with no acknowledgment to show.
-  const bare = await followUp(reference, tokens.other, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-77', occurredOn: today() });
+  assert.equal((await followUp(reference, tokens.other, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-77', occurredOn: today() })).status, 403);
+  const bare = await followUp(reference, tokens.citizen, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-77', occurredOn: today() });
   assert.equal(bare.status, 201);
   const entry = (await caseFile(id)).complaint.followUps.at(-1);
   assert.equal(entry.attachments.length, 0);
@@ -298,10 +311,10 @@ test('an official entry cannot be verified without the document it is checked ag
   assert.equal(refused.status, 400);
   assert.match(refused.body.error.message, /nothing to check this against/);
   // A site photograph cannot be passed off as the acknowledgment, on a complaint or on a response.
-  const crafted = await followUp(reference, tokens.other, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-78', occurredOn: today() }, { photos: [PNG] });
+  const crafted = await followUp(reference, tokens.citizen, { kind: 'OFFICIAL_COMPLAINT', officialChannel: 'helpline-1916', officialReference: 'TEST-1916-78', occurredOn: today() }, { photos: [PNG] });
   assert.equal(crafted.status, 400);
   assert.ok(crafted.body.error.fields.photos);
-  const craftedReply = await followUp(reference, tokens.other, { kind: 'OFFICIAL_RESPONSE', note: 'They said a notice was issued.' }, { photos: [PNG] });
+  const craftedReply = await followUp(reference, tokens.citizen, { kind: 'OFFICIAL_RESPONSE', note: 'They said a notice was issued.' }, { photos: [PNG] });
   assert.ok(craftedReply.body.error.fields.photos && craftedReply.body.error.fields.acknowledgment);
   // An older row holding only a photograph still cannot be verified.
   const legacy = await prisma.followUp.create({ data: { complaintId: id, authorId: (await prisma.user.findUnique({ where: { email: 'neighbour@example.com' } })).id, kind: 'OFFICIAL_COMPLAINT', officialChannel: 'other', officialReference: 'TEST-OLD-1' } });

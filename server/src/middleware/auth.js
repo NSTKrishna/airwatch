@@ -31,6 +31,22 @@ export async function requireAuth(req, _res, next) {
   next();
 }
 
+// Public case pages may optionally identify the signed-in reporter so they can link to
+// the private management page. A missing, expired, or invalid token must not block reading.
+export async function optionalAuth(req, _res, next) {
+  const header = req.get('authorization') || '';
+  const [scheme, token] = header.split(' ');
+  if (scheme !== 'Bearer' || !token) return next();
+  try {
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
+    const user = await prisma.user.findUnique({ where: { id: String(payload.sub) } });
+    if (user) req.user = user;
+  } catch {
+    // Optional auth intentionally treats an invalid session as signed out.
+  }
+  return next();
+}
+
 export const requireRole = (...roles) => (req, _res, next) => {
   if (!req.user) throw unauthorized();
   if (!roles.includes(req.user.role)) throw forbidden();

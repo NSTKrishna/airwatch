@@ -47,7 +47,7 @@ export default function ReportForm() {
   const overview = useApi('/public/overview');
   const projects = useApi('/public/projects');
   const [projectCode, setProjectCode] = useState(params.get('project') || '');
-  const [wardSlug, setWardSlug] = useState('');
+  const [wardSlug, setWardSlug] = useState(params.get('ward') || '');
   const [search, setSearch] = useState('');
   const [description, setDescription] = useState('');
   const [locationText, setLocationText] = useState('');

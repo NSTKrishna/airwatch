@@ -224,17 +224,33 @@ export function followUpPublicView(f, complaint) {
     by: f.authorId === complaint.citizenId ? 'REPORTER' : 'RESIDENT',
     isDemo: f.isDemo,
     createdAt: f.createdAt,
-    occurredOn: day(f.occurredOn),
+    occurredOn: verified ? day(f.occurredOn) : null,
     check: f.check,
     checkedAt: f.checkedAt,
-    checkNote: f.checkNote,
-    officialChannel: f.officialChannel ? channelName(f.officialChannel) ?? 'Another official channel' : null,
-    officialReference: f.check === 'SET_ASIDE' ? null : f.officialReference,
+    // Moderator notes and unverified official details remain private. Public pages show
+    // that a claim is waiting for review without exposing its reference or document metadata.
+    checkNote: null,
+    officialChannel: verified && f.officialChannel ? channelName(f.officialChannel) ?? 'Another official channel' : null,
+    officialReference: verified ? f.officialReference : null,
     note: verified ? f.note : null,
     photoCount: photos.length,
     photos: verified ? photos.map((a) => ({ id: a.id, url: `/api/public/attachments/${a.id}`, mimeType: a.mimeType })) : [],
-    hasAcknowledgment: (f.attachments || []).some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT'),
+    hasAcknowledgment: verified && (f.attachments || []).some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT'),
     distanceFromSiteM: distanceFromSite(f, complaint),
+  };
+}
+
+/** The reporter may see and manage the private details and files they submitted. */
+export function followUpOwnerView(f, complaint) {
+  return {
+    ...followUpPublicView(f, complaint),
+    occurredOn: day(f.occurredOn),
+    officialChannel: f.officialChannel ? channelName(f.officialChannel) ?? 'Another official channel' : null,
+    officialReference: f.officialReference,
+    note: f.note,
+    checkNote: f.checkNote,
+    hasAcknowledgment: (f.attachments || []).some((a) => a.kind === 'OFFICIAL_ACKNOWLEDGMENT'),
+    attachments: (f.attachments || []).map((a) => ({ id: a.id, kind: a.kind, filename: a.filename, url: `/api/attachments/${a.id}` })),
   };
 }
 
@@ -243,6 +259,7 @@ export function followUpMunicipalView(f, complaint) {
   return {
     ...followUpPublicView(f, complaint),
     note: f.note,
+    checkNote: f.checkNote,
     officialReference: f.officialReference,
     officialChannelKey: f.officialChannel,
     // The citizen's position stays in the database. The case desk gets the distance, as the public does.
