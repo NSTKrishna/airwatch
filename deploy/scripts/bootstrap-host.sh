@@ -3,7 +3,9 @@
 # directory layout and a nightly database backup. Runs as root. It is the Lightsail
 # instance's first-boot script (infra/lib/airwatch-stack.mjs) and is safe to run again.
 set -eu
-(set -o pipefail 2>/dev/null) && set -o pipefail || true
+if (set -o pipefail 2>/dev/null); then
+  set -o pipefail
+fi
 
 APP_USER=${APP_USER:-ubuntu}
 ROOT=${AIRWATCH_ROOT:-/opt/airwatch}
