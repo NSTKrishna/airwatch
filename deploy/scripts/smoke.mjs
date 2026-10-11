@@ -83,7 +83,8 @@ async function readOnly() {
   const pilot = overview.body.wards?.filter((w) => w.pilot) ?? [];
   check('public overview lists the pilot wards', overview.status === 200 && pilot.length >= 1, `${pilot.length} pilot wards, ${overview.body.totals?.projects} projects`);
   check('the stack says it is not an official service', overview.body.official === false);
-  check('sensors are declared simulated', overview.body.sensors?.simulated === true && overview.body.sensors?.devices?.real === 0);
+  const methodology = await call('GET', '/public/methodology');
+  check('sensors are declared simulated', methodology.status === 200 && methodology.body.monitoring?.simulated === true && methodology.body.monitoring?.physicalDevices === 0);
 
   const boundaries = await call('GET', '/public/boundaries');
   check('ward boundaries are served', boundaries.status === 200 && boundaries.body.features?.length > 0, `${boundaries.body.features?.length} wards`);
