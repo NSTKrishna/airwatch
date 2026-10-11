@@ -33,7 +33,7 @@ host="$root/releases/$id/deploy/scripts/host.sh"
 say "Settings on the host"
 host_ssh "$host init-env"
 printf '%s\n' \
-  "API_DOMAIN=$(out ApiDomain)" "CLIENT_ORIGIN=$(out FrontendUrl)" "AWS_REGION=$AWS_REGION" \
+  "API_DOMAIN=$(out ApiDomain)" "CLIENT_ORIGIN=$(out FrontendUrl),https://airwatch.rajatsrivastav.dev" "AWS_REGION=$AWS_REGION" \
   "ATTACHMENT_STORAGE=s3" "S3_BUCKET=$(out EvidenceBucket)" "CLOUDWATCH_LOG_GROUP=$(out LogGroup)" \
   | host_ssh "$host set -"
 
