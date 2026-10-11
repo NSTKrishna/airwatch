@@ -23,7 +23,6 @@ export const WARDS = [
     "slug": "ke",
     "name": "K/East",
     "areas": "Andheri (East), Jogeshwari (East), Vile Parle (East), Marol",
-    "note": "BMC has been splitting K/East into K/North and K/South. Press reports say a K/North office in Poonam Nagar, Jogeshwari (East) has been working since February 2026, but BMC has not published its boundary or contact details, so this map still shows one K/East ward with the Andheri (East) office.",
     "office": {
       "address": "Azad Road, Gundavali, Andheri (E), Mumbai - 400069",
       "phone": "022-26847000 (ward control room)",
