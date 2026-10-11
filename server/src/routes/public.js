@@ -73,7 +73,7 @@ async function wardCounts() {
 }
 
 router.get('/overview', async (_req, res) => {
-  const [wards, { counts, monitors, outcomes }, { model, sensors }] = await Promise.all([
+  const [wards, { counts, monitors, outcomes }, { sensors }] = await Promise.all([
     prisma.ward.findMany({ orderBy: { code: 'asc' } }),
     wardCounts(),
     systemStatus(),
@@ -99,7 +99,6 @@ router.get('/overview', async (_req, res) => {
     wards: rows,
     totals,
     outcomes,
-    model: { ready: model.ready, version: model.version, scope: model.scope, limitations: model.limitations },
     sensors,
     dustAuthority: DUST_AUTHORITY,
     boundarySource: boundarySource(),
