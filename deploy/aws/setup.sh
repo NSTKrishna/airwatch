@@ -51,9 +51,9 @@ aws lightsail get-bundles --query "bundles[?bundleId=='$BUNDLE_ID'].[bundleId, r
 say "CloudFormation stack $STACK_NAME"
 cd "$REPO/infra"
 npm ci --no-audit --no-fund
-npx cdk bootstrap "aws://$account/$AWS_REGION"
 context=(-c "stackName=$STACK_NAME" -c "alertEmail=$ALERT_EMAIL" -c "sshCidr=$SSH_CIDR" -c "keyPairName=$KEY_PAIR_NAME" -c "bundleId=$BUNDLE_ID" -c "monthlyBudgetUsd=${MONTHLY_BUDGET_USD:-20}")
 if [ -n "${API_DOMAIN:-}" ]; then context+=(-c "apiDomain=$API_DOMAIN"); fi
+npx cdk bootstrap "${context[@]}" "aws://$account/$AWS_REGION"
 CDK_DEFAULT_ACCOUNT=$account CDK_DEFAULT_REGION=$AWS_REGION npx cdk deploy "${context[@]}"
 
 say "Done"

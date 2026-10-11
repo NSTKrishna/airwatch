@@ -39,8 +39,14 @@ case "$command" in
     echo "Frontend: $(setting CLIENT_ORIGIN)"
     ;;
   smoke)
+    # Trust only Caddy's local root CA for this smoke run. NODE_TLS_REJECT_UNAUTHORIZED=0
+    # would disable certificate validation for every HTTPS request in the process.
+    local_ca_dir=$(mktemp -d)
+    trap 'rm -rf "$local_ca_dir"' EXIT
+    compose cp caddy:/data/caddy/pki/authorities/local/root.crt "$local_ca_dir/root.crt"
     DEMO_CITIZEN_PASSWORD=$(setting DEMO_CITIZEN_PASSWORD) DEMO_OFFICER_PASSWORD=$(setting DEMO_OFFICER_PASSWORD) \
-      node deploy/scripts/smoke.mjs --api "$(setting PUBLIC_API_URL)" --web "$(setting CLIENT_ORIGIN)" --insecure --full --require-model "$@"
+      NODE_EXTRA_CA_CERTS="$local_ca_dir/root.crt" \
+      node deploy/scripts/smoke.mjs --api "$(setting PUBLIC_API_URL)" --web "$(setting CLIENT_ORIGIN)" --full --require-model "$@"
     ;;
   demo-data) compose exec -T api node scripts/load-demo-data.js "$@" ;;
   *) compose "$command" "$@" ;;

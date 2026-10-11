@@ -2,7 +2,8 @@
 # Prepare a fresh Ubuntu 24.04 host for AirWatch: Docker with the Compose plugin, swap, the
 # directory layout and a nightly database backup. Runs as root. It is the Lightsail
 # instance's first-boot script (infra/lib/airwatch-stack.mjs) and is safe to run again.
-set -euo pipefail
+set -eu
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 APP_USER=${APP_USER:-ubuntu}
 ROOT=${AIRWATCH_ROOT:-/opt/airwatch}

@@ -4,6 +4,10 @@ A construction-dust accountability map for Mumbai: a public citizen map of verif
 projects, the ward office responsible for each, simulated dust monitoring, citizen dust reports and
 a municipal case-management dashboard that works each report through to an outcome.
 
+## Demo
+
+[Watch the AirWatch demo video](demo.mp4).
+
 The pilot covers four BMC administrative wards (K/East, H/East, L and S). Mumbai-wide coverage is
 the next phase; the other wards are already loaded with their boundaries and are switched on by
 adding verified data (see [Reference data](#reference-data)).
